@@ -91,6 +91,10 @@ Plans:
   3. At bubble, big stack opens wider to bully while medium stack tightens to survive into the money
   4. When in the money (3 players left), bot releases ICM pressure and plays aggressively to fight for 1st place
   5. In heads-up play, bot opens 55%+ of hands and correctly handles the button-posts-BB engine quirk
+**Plans:** 2 plans
+Plans:
+- [ ] 05-01-PLAN.md -- TDD stage detection and stack role methods with unit tests
+- [ ] 05-02-PLAN.md -- Wire tournament awareness into preflop/postflop decisions, ICM multiplier, exploit adjustments, and regression tests
 
 ## Progress
 
@@ -103,4 +107,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Preflop Engine | 0/2 | Planned | - |
 | 3. Postflop Analysis | 0/2 | Planned | - |
 | 4. Postflop Decisions | 2/3 | Gap closure | - |
-| 5. Tournament Awareness | 0/TBD | Not started | - |
+| 5. Tournament Awareness | 0/2 | Planned | - |
