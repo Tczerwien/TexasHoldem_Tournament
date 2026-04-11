@@ -1178,3 +1178,191 @@ class HawkEyeBot(Bot):
             bonus = 0.0
 
         return min(equity + bonus, 1.0)
+
+    # === PHASE 4: POSTFLOP DECISION ENGINE ===
+
+    def _cbet_threshold(self, texture):
+        """POST-06: Return EHS threshold for c-betting based on board texture.
+
+        DRY boards allow wider c-betting (lower threshold) since they
+        connect with fewer opponent ranges. WET boards require stronger
+        hands to c-bet profitably.
+
+        Args:
+            texture: str, one of 'DRY', 'SEMI_WET', 'PAIRED', 'WET'
+
+        Returns:
+            float: EHS threshold for c-bet decision
+        """
+        if texture == "DRY":
+            return 0.35
+        elif texture == "SEMI_WET":
+            return 0.45
+        elif texture == "PAIRED":
+            return 0.40
+        else:  # WET
+            return 0.55
+
+    def _calc_bet_size(self, est_pot, stack, texture, street):
+        """POST-09: Calculate bet size as pot fraction by street and texture.
+
+        Flop sizing varies by texture (deny equity on wet boards).
+        Turn and river use fixed fractions regardless of texture.
+        Result floored to 1 chip minimum; _guard() handles min_raise.
+
+        Args:
+            est_pot: int, estimated total pot
+            stack: int, our remaining stack
+            texture: str, board texture classification
+            street: int, 3=flop, 4=turn, 5=river
+
+        Returns:
+            int: bet amount in chips (at least 1)
+        """
+        if street == 3:
+            # Flop: sizing varies by texture
+            if texture == "DRY":
+                frac = 0.33
+            elif texture == "WET":
+                frac = 0.66
+            else:  # SEMI_WET, PAIRED
+                frac = 0.50
+        elif street == 4:
+            # Turn: 66% pot
+            frac = 0.66
+        else:
+            # River: 75% pot
+            frac = 0.75
+
+        raw = int(est_pot * frac)
+        return max(raw, 1)
+
+    def _facing_bet(self, game_state, est_pot, ehs, texture, street):
+        """POST-07/08/10/13: Decision when facing a bet (call_amount > 0).
+
+        Decision hierarchy:
+        1. SPR < 1.5 with adequate equity -> shove (POST-13)
+        2. EHS >= 0.85 (MONSTER) -> raise, with stack commitment check (POST-08/10)
+        3. EHS >= required equity -> call (POST-07)
+        4. Otherwise -> fold
+
+        Args:
+            game_state: dict from engine
+            est_pot: int, estimated total pot
+            ehs: float, effective hand strength 0.0-1.0
+            texture: str, board texture
+            street: int, 3=flop, 4=turn, 5=river
+
+        Returns:
+            tuple: (action, amount) validated by _guard()
+        """
+        call_amount = game_state["call_amount"]
+        stack = game_state["stack_size"]
+
+        # POST-07: Required equity = call / (pot + call)
+        req_eq = call_amount / (est_pot + call_amount) if (est_pot + call_amount) > 0 else 0.0
+
+        # POST-13: SPR commitment check
+        safe_pot = est_pot if est_pot > 0 else 1
+        spr = stack / safe_pot
+
+        if spr < 1.5 and ehs >= req_eq:
+            # Low SPR with enough equity -> shove
+            return self._guard("raise", stack, game_state)
+
+        # POST-08: Monster hand raises
+        if ehs >= 0.85:
+            raise_size = self._calc_bet_size(est_pot, stack, texture, street)
+            # POST-10: Stack commitment (bet >= 60% stack -> shove)
+            if raise_size >= stack * 0.6:
+                return self._guard("raise", stack, game_state)
+            return self._guard("raise", raise_size, game_state)
+
+        # POST-07: Pot odds call
+        if ehs >= req_eq:
+            return self._guard("call", 0, game_state)
+
+        # Not enough equity -> fold
+        return self._guard("fold", 0, game_state)
+
+    def _bet_or_check(self, game_state, est_pot, ehs, texture, street):
+        """POST-06/11/12/13: Decision when first to act (call_amount == 0).
+
+        Decision hierarchy:
+        1. Flop + preflop aggressor + EHS >= c-bet threshold -> c-bet (POST-06)
+        2. Turn + EHS >= 0.65 (STRONG+) -> barrel at 66% pot (POST-11)
+        3. River + EHS >= 0.65 (STRONG+) -> value bet at 75% pot (POST-12)
+        4. Otherwise -> check
+
+        All bets check SPR (POST-13) and stack commitment (POST-10) before sizing.
+
+        Args:
+            game_state: dict from engine
+            est_pot: int, estimated total pot
+            ehs: float, effective hand strength 0.0-1.0
+            texture: str, board texture
+            street: int, 3=flop, 4=turn, 5=river
+
+        Returns:
+            tuple: (action, amount) validated by _guard()
+        """
+        stack = game_state["stack_size"]
+
+        # POST-13: SPR commitment check
+        safe_pot = est_pot if est_pot > 0 else 1
+        spr = stack / safe_pot
+
+        # Helper: apply SPR and stack commitment to a bet
+        def _apply_commit(bet_size):
+            if spr < 1.5:
+                return self._guard("raise", stack, game_state)
+            if bet_size >= stack * 0.6:
+                return self._guard("raise", stack, game_state)
+            return self._guard("raise", bet_size, game_state)
+
+        # POST-06: C-bet on flop when preflop aggressor
+        if street == 3 and self._was_preflop_aggressor:
+            threshold = self._cbet_threshold(texture)
+            if ehs >= threshold:
+                bet_size = self._calc_bet_size(est_pot, stack, texture, street)
+                return _apply_commit(bet_size)
+
+        # POST-11: Turn barrel with STRONG+ hands
+        if street == 4 and ehs >= 0.65:
+            bet_size = self._calc_bet_size(est_pot, stack, texture, street)
+            return _apply_commit(bet_size)
+
+        # POST-12: River value bet with STRONG+ hands
+        if street == 5 and ehs >= 0.65:
+            bet_size = self._calc_bet_size(est_pot, stack, texture, street)
+            return _apply_commit(bet_size)
+
+        # Default: check
+        return self._guard("call", 0, game_state)
+
+    def _postflop(self, game_state, est_pot):
+        """POST: Single entry point for all postflop decisions.
+
+        Computes EHS and texture ONCE (anti-pattern: never call _ehs twice),
+        determines street from board length, then routes to _facing_bet
+        or _bet_or_check based on call_amount.
+
+        Args:
+            game_state: dict from engine
+            est_pot: int, estimated total pot
+
+        Returns:
+            tuple: (action, amount) from sub-method
+        """
+        hole = game_state["hole_cards"]
+        board = game_state["board_cards"]
+        call_amount = game_state["call_amount"]
+
+        ehs = self._ehs(hole, board)
+        texture = self._classify_board(board)
+        street = len(board)  # 3=flop, 4=turn, 5=river
+
+        if call_amount > 0:
+            return self._facing_bet(game_state, est_pot, ehs, texture, street)
+        else:
+            return self._bet_or_check(game_state, est_pot, ehs, texture, street)
