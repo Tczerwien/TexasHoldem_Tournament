@@ -338,6 +338,22 @@ class TestSituationDetection(unittest.TestCase):
         gs = make_game_state([make_card(0, 1), make_card(0, 2)], call_amount=120)
         self.assertEqual(self.bot._detect_situation(gs), "facing_3bet")
 
+    def test_situation_detection_all_five(self):
+        """PRE-06: All 5 situations return correct values in a single test."""
+        cards = [make_card(0, 1), make_card(0, 2)]
+        cases = [
+            (0, "bb_option"),
+            (10, "sb_complete"),
+            (20, "rfi"),
+            (50, "facing_open"),
+            (120, "facing_3bet"),
+        ]
+        for call_amt, expected in cases:
+            gs = make_game_state(cards, call_amount=call_amt,
+                                 big_blind=20, small_blind=10)
+            self.assertEqual(self.bot._detect_situation(gs), expected,
+                             f"call_amount={call_amt} should be {expected}")
+
 
 class TestPushFoldDecisions(unittest.TestCase):
     """PRE-04, PRE-05: Push-fold mode decision tests."""
@@ -479,6 +495,101 @@ class TestRaiseSizing(unittest.TestCase):
         self.assertEqual(amount, 24)
 
 
+class TestStackModeBoundaries(unittest.TestCase):
+    """PRE-02: Additional stack mode boundary precision tests."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+
+    def _gs(self, stack, bb=20):
+        return make_game_state([make_card(12, 1), make_card(12, 2)],
+                               stack_size=stack, big_blind=bb)
+
+    def test_stack_mode_boundary_39_9bb(self):
+        """39.9BB should be medium (not deep)."""
+        self.assertEqual(self.bot._get_stack_mode(self._gs(798, 20)), "medium")
+
+    def test_stack_mode_boundary_24_9bb(self):
+        """24.9BB should be shallow (not medium)."""
+        self.assertEqual(self.bot._get_stack_mode(self._gs(498, 20)), "shallow")
+
+    def test_stack_mode_boundary_14_9bb(self):
+        """14.9BB should be push_fold (not shallow)."""
+        self.assertEqual(self.bot._get_stack_mode(self._gs(298, 20)), "push_fold")
+
+    def test_stack_mode_zero_bb(self):
+        """T-02-05: bb=0 should return 'deep' safely (no division by zero)."""
+        gs = make_game_state([make_card(12, 1), make_card(12, 2)],
+                             stack_size=1500, big_blind=0, small_blind=0)
+        self.assertEqual(self.bot._get_stack_mode(gs), "deep")
+
+
+class Test3BetHandDetection(unittest.TestCase):
+    """PRE-08: 3-bet hand identification tests."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+
+    def test_3bet_aa(self):
+        """AA is a 3-bet hand."""
+        self.assertTrue(self.bot._is_3bet_hand([make_card(12, 1), make_card(12, 2)]))
+
+    def test_3bet_kk(self):
+        """KK is a 3-bet hand."""
+        self.assertTrue(self.bot._is_3bet_hand([make_card(11, 1), make_card(11, 2)]))
+
+    def test_3bet_qq(self):
+        """QQ is a 3-bet hand."""
+        self.assertTrue(self.bot._is_3bet_hand([make_card(10, 1), make_card(10, 2)]))
+
+    def test_3bet_aks(self):
+        """AKs is a 3-bet hand."""
+        self.assertTrue(self.bot._is_3bet_hand([make_card(12, 1), make_card(11, 1)]))
+
+    def test_3bet_not_jj(self):
+        """JJ is NOT a 3-bet hand."""
+        self.assertFalse(self.bot._is_3bet_hand([make_card(9, 1), make_card(9, 2)]))
+
+    def test_3bet_not_ako(self):
+        """AKo is NOT a 3-bet hand."""
+        self.assertFalse(self.bot._is_3bet_hand([make_card(12, 1), make_card(11, 2)]))
+
+    def test_3bet_not_aqs(self):
+        """AQs is NOT a 3-bet hand."""
+        self.assertFalse(self.bot._is_3bet_hand([make_card(12, 1), make_card(10, 1)]))
+
+    def test_3bet_not_72o(self):
+        """72o is NOT a 3-bet hand."""
+        self.assertFalse(self.bot._is_3bet_hand([make_card(5, 1), make_card(0, 2)]))
+
+
+class Test4BetHandDetection(unittest.TestCase):
+    """PRE-08: 4-bet hand identification tests."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+
+    def test_4bet_aa(self):
+        """AA is a 4-bet hand."""
+        self.assertTrue(self.bot._is_4bet_hand([make_card(12, 1), make_card(12, 2)]))
+
+    def test_4bet_kk(self):
+        """KK is a 4-bet hand."""
+        self.assertTrue(self.bot._is_4bet_hand([make_card(11, 1), make_card(11, 2)]))
+
+    def test_4bet_not_qq(self):
+        """QQ is NOT a 4-bet hand."""
+        self.assertFalse(self.bot._is_4bet_hand([make_card(10, 1), make_card(10, 2)]))
+
+    def test_4bet_not_jj(self):
+        """JJ is NOT a 4-bet hand."""
+        self.assertFalse(self.bot._is_4bet_hand([make_card(9, 1), make_card(9, 2)]))
+
+    def test_4bet_not_aks(self):
+        """AKs is NOT a 4-bet hand."""
+        self.assertFalse(self.bot._is_4bet_hand([make_card(12, 1), make_card(11, 1)]))
+
+
 class TestAggressorFlag(unittest.TestCase):
     """STATE-03: Preflop aggressor flag tests."""
 
@@ -498,6 +609,55 @@ class TestAggressorFlag(unittest.TestCase):
         gs = make_game_state(trash, stack_size=1500, call_amount=20, big_blind=20)
         self.bot.get_action(gs)
         self.assertFalse(self.bot._was_preflop_aggressor)
+
+    def test_aggressor_flag_not_set_on_call(self):
+        """After calling preflop (SB complete), _was_preflop_aggressor is False."""
+        hand = [make_card(8, 1), make_card(7, 2)]  # T9o, decent hand
+        gs = make_game_state(hand, stack_size=1500, call_amount=10,
+                             big_blind=20, small_blind=10)
+        self.bot.get_action(gs)
+        self.assertFalse(self.bot._was_preflop_aggressor)
+
+
+class TestRegressionPhase1(unittest.TestCase):
+    """Regression: Phase 1 safety guarantees preserved."""
+
+    def test_regression_bot_instantiation(self):
+        """HawkEyeBot can still be instantiated."""
+        bot = HawkEyeBot()
+        self.assertEqual(bot.name, "HawkEye")
+
+    def test_regression_get_action_postflop(self):
+        """get_action works with postflop game_state (tight-passive fallback)."""
+        bot = HawkEyeBot()
+        board = [make_card(0, 1), make_card(2, 2), make_card(4, 4)]
+        gs = make_game_state([make_card(5, 1), make_card(0, 2)],
+                             board_cards=board, call_amount=50)
+        result = bot.get_action(gs)
+        self.assertIsInstance(result, tuple)
+        self.assertIn(result[0], ("fold", "call", "raise"))
+
+    def test_regression_guard_prevents_fold_when_free(self):
+        """SAFE-03: _guard still prevents fold when call_amount=0."""
+        bot = HawkEyeBot()
+        gs = make_game_state([make_card(5, 1), make_card(0, 2)], call_amount=0)
+        result = bot._guard("fold", 0, gs)
+        self.assertEqual(result, ("call", 0))
+
+    def test_regression_guard_prevents_check_action(self):
+        """SAFE-04: _guard converts 'check' to ('call', 0)."""
+        bot = HawkEyeBot()
+        gs = make_game_state([make_card(5, 1), make_card(0, 2)], call_amount=20)
+        result = bot._guard("check", 0, gs)
+        self.assertEqual(result, ("call", 0))
+
+    def test_regression_guard_caps_raise(self):
+        """SAFE-05: _guard caps raise to stack_size."""
+        bot = HawkEyeBot()
+        gs = make_game_state([make_card(5, 1), make_card(0, 2)],
+                             stack_size=500, call_amount=20, min_raise=20)
+        result = bot._guard("raise", 9999, gs)
+        self.assertEqual(result, ("raise", 500))
 
 
 if __name__ == "__main__":
