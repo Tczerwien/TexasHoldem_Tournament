@@ -269,5 +269,236 @@ class TestExistingSafety(unittest.TestCase):
         self.assertIn(result[0], ("fold", "call", "raise"))
 
 
+# === Helper: game state factory ===
+
+
+def make_game_state(hole_cards, stack_size=1500, call_amount=20, min_raise=20,
+                    big_blind=20, small_blind=10, board_cards=None,
+                    active_players=6, pot_size=30):
+    """Build a standard game_state dict for tests."""
+    return {
+        "hole_cards": hole_cards,
+        "board_cards": board_cards if board_cards is not None else [],
+        "pot_size": pot_size,
+        "stack_size": stack_size,
+        "call_amount": call_amount,
+        "min_raise": min_raise,
+        "blinds": {"big": big_blind, "small": small_blind},
+        "active_players": active_players,
+    }
+
+
+class TestStackModeDetection(unittest.TestCase):
+    """PRE-02: Stack mode boundary tests."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+
+    def _gs(self, stack, bb=20):
+        return make_game_state([make_card(12, 1), make_card(12, 2)],
+                               stack_size=stack, big_blind=bb)
+
+    def test_deep_at_40bb(self):
+        self.assertEqual(self.bot._get_stack_mode(self._gs(800, 20)), "deep")
+
+    def test_medium_at_25bb(self):
+        self.assertEqual(self.bot._get_stack_mode(self._gs(500, 20)), "medium")
+
+    def test_shallow_at_15bb(self):
+        self.assertEqual(self.bot._get_stack_mode(self._gs(300, 20)), "shallow")
+
+    def test_push_fold_at_14bb(self):
+        self.assertEqual(self.bot._get_stack_mode(self._gs(280, 20)), "push_fold")
+
+
+class TestSituationDetection(unittest.TestCase):
+    """PRE-06: Situation inference tests."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+
+    def test_bb_option(self):
+        gs = make_game_state([make_card(0, 1), make_card(0, 2)], call_amount=0)
+        self.assertEqual(self.bot._detect_situation(gs), "bb_option")
+
+    def test_sb_complete(self):
+        gs = make_game_state([make_card(0, 1), make_card(0, 2)],
+                             call_amount=10, big_blind=20, small_blind=10)
+        self.assertEqual(self.bot._detect_situation(gs), "sb_complete")
+
+    def test_rfi(self):
+        gs = make_game_state([make_card(0, 1), make_card(0, 2)], call_amount=20)
+        self.assertEqual(self.bot._detect_situation(gs), "rfi")
+
+    def test_facing_open(self):
+        gs = make_game_state([make_card(0, 1), make_card(0, 2)], call_amount=50)
+        self.assertEqual(self.bot._detect_situation(gs), "facing_open")
+
+    def test_facing_3bet(self):
+        gs = make_game_state([make_card(0, 1), make_card(0, 2)], call_amount=120)
+        self.assertEqual(self.bot._detect_situation(gs), "facing_3bet")
+
+
+class TestPushFoldDecisions(unittest.TestCase):
+    """PRE-04, PRE-05: Push-fold mode decision tests."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+
+    def test_push_fold_shove_aa(self):
+        """AA at 14BB should shove all-in."""
+        aa = [make_card(12, 1), make_card(12, 2)]
+        gs = make_game_state(aa, stack_size=280, call_amount=20, big_blind=20)
+        self.bot._detect_new_hand(gs)
+        action, amount = self.bot._preflop(gs, 30)
+        self.assertEqual(action, "raise")
+
+    def test_push_fold_fold_trash(self):
+        """72o at 14BB should fold."""
+        trash = [make_card(5, 1), make_card(0, 2)]
+        gs = make_game_state(trash, stack_size=280, call_amount=20, big_blind=20)
+        self.bot._detect_new_hand(gs)
+        action, _ = self.bot._preflop(gs, 30)
+        self.assertEqual(action, "fold")
+
+    def test_push_fold_bb_option_checks(self):
+        """Push-fold mode, call_amount=0 (BB option) -> check."""
+        hand = [make_card(5, 1), make_card(0, 2)]
+        gs = make_game_state(hand, stack_size=280, call_amount=0, big_blind=20)
+        self.bot._detect_new_hand(gs)
+        action, amount = self.bot._preflop(gs, 30)
+        self.assertEqual(action, "call")
+        self.assertEqual(amount, 0)
+
+    def test_push_fold_facing_shove_aa_stays(self):
+        """AA facing a shove should call/raise (stay in)."""
+        aa = [make_card(12, 1), make_card(12, 2)]
+        gs = make_game_state(aa, stack_size=280, call_amount=168, big_blind=20,
+                             min_raise=20)
+        self.bot._detect_new_hand(gs)
+        action, _ = self.bot._preflop(gs, 200)
+        self.assertIn(action, ("call", "raise"))
+
+    def test_push_fold_facing_shove_trash_folds(self):
+        """72o facing a shove should fold."""
+        trash = [make_card(5, 1), make_card(0, 2)]
+        gs = make_game_state(trash, stack_size=280, call_amount=168, big_blind=20)
+        self.bot._detect_new_hand(gs)
+        action, _ = self.bot._preflop(gs, 200)
+        self.assertEqual(action, "fold")
+
+
+class TestDeepDecisions(unittest.TestCase):
+    """PRE-03, PRE-07: Deep stack preflop decisions."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+
+    def test_deep_rfi_opens_strong(self):
+        """AKo at 40BB+ RFI should raise."""
+        ako = [make_card(12, 1), make_card(11, 2)]  # AKo
+        gs = make_game_state(ako, stack_size=1500, call_amount=20, big_blind=20)
+        self.bot._detect_new_hand(gs)
+        action, _ = self.bot._preflop(gs, 30)
+        self.assertEqual(action, "raise")
+
+    def test_deep_rfi_folds_trash(self):
+        """72o at 40BB+ RFI should fold."""
+        trash = [make_card(5, 1), make_card(0, 2)]
+        gs = make_game_state(trash, stack_size=1500, call_amount=20, big_blind=20)
+        self.bot._detect_new_hand(gs)
+        action, _ = self.bot._preflop(gs, 30)
+        self.assertEqual(action, "fold")
+
+    def test_facing_open_3bets_with_qq(self):
+        """QQ facing an open should 3-bet (raise)."""
+        qq = [make_card(10, 1), make_card(10, 2)]
+        gs = make_game_state(qq, stack_size=1500, call_amount=50, big_blind=20,
+                             min_raise=20)
+        self.bot._detect_new_hand(gs)
+        action, _ = self.bot._preflop(gs, 70)
+        self.assertEqual(action, "raise")
+
+    def test_facing_3bet_4bets_with_aa(self):
+        """AA facing a 3-bet should 4-bet all-in."""
+        aa = [make_card(12, 1), make_card(12, 2)]
+        gs = make_game_state(aa, stack_size=1500, call_amount=120, big_blind=20,
+                             min_raise=20)
+        self.bot._detect_new_hand(gs)
+        action, amount = self.bot._preflop(gs, 170)
+        self.assertEqual(action, "raise")
+        self.assertEqual(amount, 1500)  # all-in
+
+    def test_facing_3bet_folds_trash(self):
+        """72o facing a 3-bet should fold."""
+        trash = [make_card(5, 1), make_card(0, 2)]
+        gs = make_game_state(trash, stack_size=1500, call_amount=120, big_blind=20)
+        self.bot._detect_new_hand(gs)
+        action, _ = self.bot._preflop(gs, 170)
+        self.assertEqual(action, "fold")
+
+    def test_bb_option_checks(self):
+        """BB option (call_amount=0) should check with any hand."""
+        hand = [make_card(5, 1), make_card(0, 2)]
+        gs = make_game_state(hand, stack_size=1500, call_amount=0, big_blind=20)
+        self.bot._detect_new_hand(gs)
+        action, amount = self.bot._preflop(gs, 30)
+        self.assertEqual(action, "call")
+        self.assertEqual(amount, 0)
+
+    def test_sb_complete_calls_decent(self):
+        """SB complete with a decent hand (chen >= 4) should call."""
+        hand = [make_card(8, 1), make_card(7, 2)]  # T9o, chen ~5
+        gs = make_game_state(hand, stack_size=1500, call_amount=10,
+                             big_blind=20, small_blind=10)
+        self.bot._detect_new_hand(gs)
+        action, _ = self.bot._preflop(gs, 30)
+        self.assertEqual(action, "call")
+
+
+class TestRaiseSizing(unittest.TestCase):
+    """PRE-09: Raise sizing tests."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+
+    def test_raise_sizing_deep(self):
+        """Deep stack RFI raise amount should be ~2.5*bb - call_amount = 30."""
+        gs = make_game_state([make_card(12, 1), make_card(12, 2)],
+                             stack_size=1500, call_amount=20, big_blind=20)
+        amount = self.bot._preflop_raise_amount(gs, "deep")
+        # 2.5 * 20 = 50, minus call_amount 20 = 30
+        self.assertEqual(amount, 30)
+
+    def test_raise_sizing_medium(self):
+        """Medium stack RFI raise amount should be ~2.2*bb - call_amount."""
+        gs = make_game_state([make_card(12, 1), make_card(12, 2)],
+                             stack_size=500, call_amount=20, big_blind=20)
+        amount = self.bot._preflop_raise_amount(gs, "medium")
+        # 2.2 * 20 = 44, minus call_amount 20 = 24
+        self.assertEqual(amount, 24)
+
+
+class TestAggressorFlag(unittest.TestCase):
+    """STATE-03: Preflop aggressor flag tests."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+
+    def test_aggressor_flag_set_on_raise(self):
+        """After raising preflop, _was_preflop_aggressor should be True."""
+        aa = [make_card(12, 1), make_card(12, 2)]
+        gs = make_game_state(aa, stack_size=1500, call_amount=20, big_blind=20)
+        self.bot.get_action(gs)
+        self.assertTrue(self.bot._was_preflop_aggressor)
+
+    def test_aggressor_flag_not_set_on_fold(self):
+        """After folding preflop, _was_preflop_aggressor should be False."""
+        trash = [make_card(5, 1), make_card(0, 2)]
+        gs = make_game_state(trash, stack_size=1500, call_amount=20, big_blind=20)
+        self.bot.get_action(gs)
+        self.assertFalse(self.bot._was_preflop_aggressor)
+
+
 if __name__ == "__main__":
     unittest.main()
