@@ -826,9 +826,11 @@ class HawkEyeBot(Bot):
         if situation == "facing_open":
             if self._is_3bet_hand(hole_cards):
                 self._was_preflop_aggressor = True
-                # 3x the open: amount = call_amount * 2
-                amt = call_amount * 2
-                return self._guard("raise", amt, game_state)
+                # 3-bet to ~3x the open. Engine uses raise-BY semantics:
+                # total_to_put_in = call_amount + amount
+                # So to make total = 3 * call_amount: amount = 2 * call_amount
+                threex_amount = call_amount * 2
+                return self._guard("raise", threex_amount, game_state)
             elif chen_score >= 5:
                 return self._guard("call", 0, game_state)
             else:
