@@ -633,7 +633,8 @@ class HawkEyeBot(Bot):
         sb = game_state["blinds"]["small"]
         if call_amount == 0:
             return "bb_option"
-        elif call_amount == bb - sb:
+        # Only treat as sb_complete if sb < bb (standard blind structure)
+        elif sb < bb and call_amount == bb - sb:
             return "sb_complete"
         elif call_amount == bb:
             return "rfi"
