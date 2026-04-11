@@ -565,11 +565,10 @@ class HawkEyeBot(Bot):
         return self._pot_total + self._street_pot
 
     def _decide(self, game_state):
-        """Tight-passive decision logic with premium hand raises.
+        """Main decision router: preflop engine or postflop fallback.
 
-        D-01: Call if cheap (< 15% of stack), fold otherwise.
-        D-02: Raise with premium hands (AA/KK/QQ) preflop.
-        D-03: Always check when call_amount is 0 (non-premium).
+        D-11: Routes to _preflop() when board is empty, tight-passive
+        fallback for postflop (Phase 3/4 will replace postflop logic).
         """
         # 1. Detect hand boundary and reset state
         self._detect_new_hand(game_state)
@@ -577,39 +576,18 @@ class HawkEyeBot(Bot):
         # 2. Update pot accumulator
         est_pot = self._update_pot(game_state)
 
-        call_amount = game_state["call_amount"]
-        stack_size = game_state["stack_size"]
-        min_raise = game_state["min_raise"]
-        hole_cards = game_state["hole_cards"]
-        board_cards = game_state["board_cards"]
-
-        # D-03: Always check when free (handled by guard, but be explicit)
-        if call_amount == 0:
-            # D-02: Raise with premium hands preflop
-            if len(board_cards) == 0 and self._is_premium(hole_cards):
-                big_blind = game_state["blinds"]["big"]
-                raise_amt = max(min_raise, big_blind * 3)
-                if raise_amt > stack_size:
-                    raise_amt = stack_size
-                if len(board_cards) == 0:  # only set on preflop raises
-                    self._was_preflop_aggressor = True
-                return self._guard("raise", raise_amt, game_state)
-            return self._guard("call", 0, game_state)
-
-        # D-02: Raise with premium hands preflop when facing a bet
-        if len(board_cards) == 0 and self._is_premium(hole_cards):
-            raise_amt = max(min_raise, call_amount * 3)
-            if raise_amt > stack_size:
-                raise_amt = stack_size
-            if len(board_cards) == 0:  # only set on preflop raises
-                self._was_preflop_aggressor = True
-            return self._guard("raise", raise_amt, game_state)
-
-        # D-01: Tight-passive -- call if cheap (< 15% of stack), fold otherwise
-        if call_amount < stack_size * 0.15:
-            return self._guard("call", 0, game_state)
-
-        return self._guard("fold", 0, game_state)
+        # 3. Route to preflop or postflop
+        if len(game_state["board_cards"]) == 0:
+            return self._preflop(game_state, est_pot)
+        else:
+            # Phase 3/4 will add postflop logic. For now, use tight-passive fallback.
+            call_amount = game_state["call_amount"]
+            stack_size = game_state["stack_size"]
+            if call_amount == 0:
+                return self._guard("call", 0, game_state)
+            if call_amount < stack_size * 0.15:
+                return self._guard("call", 0, game_state)
+            return self._guard("fold", 0, game_state)
 
     def _is_premium(self, hole_cards):
         """D-02: Detect premium hands (AA, KK, QQ) from treys integer encoding.
@@ -632,3 +610,233 @@ class HawkEyeBot(Bot):
         low = min(r1, r2)
         suited = (s1 == s2) and (r1 != r2)  # pairs cannot be suited
         return (high, low, suited)
+
+    def _get_stack_mode(self, game_state):
+        """PRE-02: Classify stack depth into deep/medium/shallow/push_fold."""
+        bb = game_state["blinds"]["big"]
+        if bb == 0:
+            return "deep"  # T-02-05: avoid division by zero
+        bbs = game_state["stack_size"] / bb
+        if bbs >= 40:
+            return "deep"
+        elif bbs >= 25:
+            return "medium"
+        elif bbs >= 15:
+            return "shallow"
+        else:
+            return "push_fold"
+
+    def _detect_situation(self, game_state):
+        """PRE-06: Infer preflop situation from call_amount relative to blinds."""
+        call_amount = game_state["call_amount"]
+        bb = game_state["blinds"]["big"]
+        sb = game_state["blinds"]["small"]
+        if call_amount == 0:
+            return "bb_option"
+        elif call_amount == bb - sb:
+            return "sb_complete"
+        elif call_amount == bb:
+            return "rfi"
+        elif call_amount < bb * 6:
+            return "facing_open"
+        else:
+            return "facing_3bet"
+
+    def _is_3bet_hand(self, hole_cards):
+        """PRE-08: QQ+, AKs -- hands that 3-bet facing an open."""
+        r1 = (hole_cards[0] >> 8) & 0xF
+        r2 = (hole_cards[1] >> 8) & 0xF
+        s1 = (hole_cards[0] >> 12) & 0xF
+        s2 = (hole_cards[1] >> 12) & 0xF
+        high = max(r1, r2)
+        low = min(r1, r2)
+        if r1 == r2 and r1 >= 10:      # QQ(10), KK(11), AA(12)
+            return True
+        if high == 12 and low == 11 and s1 == s2:  # AKs
+            return True
+        return False
+
+    def _is_4bet_hand(self, hole_cards):
+        """PRE-08: AA, KK -- hands that 4-bet facing a 3-bet."""
+        r1 = (hole_cards[0] >> 8) & 0xF
+        r2 = (hole_cards[1] >> 8) & 0xF
+        return r1 == r2 and r1 >= 11    # KK(11), AA(12)
+
+    def _preflop_raise_amount(self, game_state, stack_mode):
+        """PRE-09: Calculate raise increment by stack mode.
+
+        Returns the amount parameter for ('raise', amount).
+        Engine does: total_to_put_in = call_amount + amount.
+        """
+        bb = game_state["blinds"]["big"]
+        call_amount = game_state["call_amount"]
+        if stack_mode == "deep":
+            desired_total = int(bb * 2.5)
+        elif stack_mode == "medium":
+            desired_total = int(bb * 2.2)
+        else:  # shallow
+            desired_total = int(bb * 2.0)
+        # amount is the raise increment above call_amount
+        amount = desired_total - call_amount
+        if amount < 1:
+            amount = 1  # _guard will floor to min_raise
+        return amount
+
+    def _preflop(self, game_state, est_pot):
+        """PRE-03, PRE-07: Main preflop decision engine.
+
+        Decision tree: stack mode -> situation -> hand strength -> action.
+        All returns go through _guard() (T-02-08).
+        """
+        hole_cards = game_state["hole_cards"]
+        call_amount = game_state["call_amount"]
+        stack = game_state["stack_size"]
+        bb = game_state["blinds"]["big"]
+
+        # 1. Extract chen key and score (T-02-07: .get with default 0)
+        chen_key = self._get_chen_key(hole_cards)
+        chen_score = CHEN_TABLE.get(chen_key, 0)
+
+        # 2. Get stack mode and situation
+        stack_mode = self._get_stack_mode(game_state)
+        situation = self._detect_situation(game_state)
+
+        # === PUSH-FOLD MODE (<15BB) ===
+        if stack_mode == "push_fold":
+            # BB option: free check
+            if situation == "bb_option":
+                return self._guard("call", 0, game_state)
+
+            # Facing a shove (call_amount >= 50% of stack)
+            if call_amount >= stack * 0.5:
+                villain_bb = call_amount / bb if bb > 0 else 999
+                if CALL_TABLE.get(chen_key, 0) >= villain_bb:
+                    return self._guard("call", 0, game_state)
+                else:
+                    return self._guard("fold", 0, game_state)
+
+            # RFI or SB complete: shove or fold
+            if situation in ("rfi", "sb_complete"):
+                hero_bb = stack / bb if bb > 0 else 999
+                if SHOVE_TABLE.get(chen_key, 0) >= hero_bb:
+                    self._was_preflop_aggressor = True
+                    return self._guard("raise", stack, game_state)
+                else:
+                    return self._guard("fold", 0, game_state)
+
+            # Facing open or facing 3-bet in push-fold: reshove or fold
+            if situation in ("facing_open", "facing_3bet"):
+                villain_bb = call_amount / bb if bb > 0 else 999
+                if CALL_TABLE.get(chen_key, 0) >= villain_bb:
+                    self._was_preflop_aggressor = True
+                    return self._guard("raise", stack, game_state)
+                else:
+                    return self._guard("fold", 0, game_state)
+
+            # Fallback
+            return self._guard("fold", 0, game_state)
+
+        # === SHALLOW MODE (15-24BB) ===
+        if stack_mode == "shallow":
+            # BB option: free check
+            if situation == "bb_option":
+                return self._guard("call", 0, game_state)
+
+            # Large bet relative to stack (>= 40%): treat as shove decision
+            if call_amount >= stack * 0.4:
+                villain_bb = call_amount / bb if bb > 0 else 999
+                if CALL_TABLE.get(chen_key, 0) >= villain_bb:
+                    self._was_preflop_aggressor = True
+                    return self._guard("raise", stack, game_state)
+                else:
+                    return self._guard("fold", 0, game_state)
+
+            # RFI: shove strong, raise decent, fold trash
+            if situation == "rfi":
+                hero_bb = stack / bb if bb > 0 else 999
+                if SHOVE_TABLE.get(chen_key, 0) >= hero_bb:
+                    self._was_preflop_aggressor = True
+                    return self._guard("raise", stack, game_state)
+                elif chen_score >= 8:
+                    self._was_preflop_aggressor = True
+                    amt = self._preflop_raise_amount(game_state, stack_mode)
+                    return self._guard("raise", amt, game_state)
+                else:
+                    return self._guard("fold", 0, game_state)
+
+            # Facing open: 3-bet shove premium, call decent, fold trash
+            if situation == "facing_open":
+                if self._is_3bet_hand(hole_cards):
+                    self._was_preflop_aggressor = True
+                    return self._guard("raise", stack, game_state)
+                elif chen_score >= 7:
+                    return self._guard("call", 0, game_state)
+                else:
+                    return self._guard("fold", 0, game_state)
+
+            # Facing 3-bet: 4-bet shove or fold
+            if situation == "facing_3bet":
+                if self._is_4bet_hand(hole_cards):
+                    self._was_preflop_aggressor = True
+                    return self._guard("raise", stack, game_state)
+                else:
+                    return self._guard("fold", 0, game_state)
+
+            # SB complete: call with decent, fold trash
+            if situation == "sb_complete":
+                if chen_score >= 4:
+                    return self._guard("call", 0, game_state)
+                else:
+                    return self._guard("fold", 0, game_state)
+
+            # Fallback
+            return self._guard("fold", 0, game_state)
+
+        # === DEEP / MEDIUM MODE (25BB+) ===
+        # Chen thresholds by stack mode
+        rfi_threshold = 6 if stack_mode == "deep" else 7
+
+        # BB option: always check (free card)
+        if situation == "bb_option":
+            return self._guard("call", 0, game_state)
+
+        # RFI: open with hands above threshold
+        if situation == "rfi":
+            if chen_score >= rfi_threshold:
+                self._was_preflop_aggressor = True
+                amt = self._preflop_raise_amount(game_state, stack_mode)
+                return self._guard("raise", amt, game_state)
+            else:
+                return self._guard("fold", 0, game_state)
+
+        # SB complete: call with wide range (chen >= 4)
+        if situation == "sb_complete":
+            if chen_score >= 4:
+                return self._guard("call", 0, game_state)
+            else:
+                return self._guard("fold", 0, game_state)
+
+        # Facing open: 3-bet premium, call decent, fold trash
+        if situation == "facing_open":
+            if self._is_3bet_hand(hole_cards):
+                self._was_preflop_aggressor = True
+                # 3x the open: amount = call_amount * 2
+                amt = call_amount * 2
+                return self._guard("raise", amt, game_state)
+            elif chen_score >= 5:
+                return self._guard("call", 0, game_state)
+            else:
+                return self._guard("fold", 0, game_state)
+
+        # Facing 3-bet: 4-bet all-in with AA/KK, call strong deep, fold rest
+        if situation == "facing_3bet":
+            if self._is_4bet_hand(hole_cards):
+                self._was_preflop_aggressor = True
+                return self._guard("raise", stack, game_state)
+            elif chen_score >= 9 and stack_mode == "deep":
+                return self._guard("call", 0, game_state)
+            else:
+                return self._guard("fold", 0, game_state)
+
+        # Fallback: fold unknown situations
+        return self._guard("fold", 0, game_state)

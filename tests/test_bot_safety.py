@@ -159,12 +159,14 @@ def test_safe06_picklable():
     assert bot2._pot_total == 200, f"SAFE-06 pot_total failed: got {bot2._pot_total}"
 
 
-# --- D-01: Tight-passive call/fold logic ---
+# --- D-01: Tight-passive call/fold logic (postflop fallback) ---
 
 def test_d01_call_when_cheap():
     bot = HawkEyeBot()
     # call_amount=100, stack_size=1500 -> 6.7% < 15% -> call
-    state = make_state(call_amount=100, stack_size=1500)
+    # Use postflop board (3 cards) since preflop now uses dedicated engine
+    board = [0x00010000, 0x00020000, 0x00040000]  # 3 board cards
+    state = make_state(call_amount=100, stack_size=1500, board_cards=board)
     result = bot._decide(state)
     assert result == ("call", 0), f"D-01 call failed: got {result}, expected ('call', 0)"
 
@@ -172,17 +174,20 @@ def test_d01_call_when_cheap():
 def test_d01_fold_when_expensive():
     bot = HawkEyeBot()
     # call_amount=300, stack_size=1500 -> 20% >= 15% -> fold
-    state = make_state(call_amount=300, stack_size=1500)
+    # Use postflop board since preflop now uses dedicated engine
+    board = [0x00010000, 0x00020000, 0x00040000]
+    state = make_state(call_amount=300, stack_size=1500, board_cards=board)
     result = bot._decide(state)
     assert result == ("fold", 0), f"D-01 fold failed: got {result}, expected ('fold', 0)"
 
 
-# --- D-03: Check when free (non-premium) ---
+# --- D-03: Check when free (non-premium, postflop) ---
 
 def test_d03_check_when_free():
     bot = HawkEyeBot()
-    # call_amount=0, non-premium hand -> check (returned as ('call', 0))
-    state = make_state(call_amount=0)
+    # call_amount=0, non-premium hand, postflop -> check (returned as ('call', 0))
+    board = [0x00010000, 0x00020000, 0x00040000]
+    state = make_state(call_amount=0, board_cards=board)
     result = bot._decide(state)
     assert result == ("call", 0), f"D-03 failed: got {result}, expected ('call', 0)"
 
@@ -191,9 +196,10 @@ def test_d03_check_when_free():
 
 def test_d02_raise_premium_preflop():
     bot = HawkEyeBot()
-    # AA preflop, call_amount=0 -> should raise
+    # AA preflop, call_amount=bb (RFI) -> should raise
+    # Phase 2 preflop engine: bb_option (call_amount=0) checks, RFI raises
     aa_cards = make_premium_cards()
-    state = make_state(call_amount=0, hole_cards=aa_cards, board_cards=[])
+    state = make_state(call_amount=20, hole_cards=aa_cards, board_cards=[])
     result = bot._decide(state)
     assert result[0] == "raise", f"D-02 failed: got action '{result[0]}', expected 'raise'"
     assert result[1] > 0, f"D-02 failed: raise amount should be > 0, got {result[1]}"

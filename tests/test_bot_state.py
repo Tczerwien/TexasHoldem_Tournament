@@ -138,9 +138,10 @@ def test_state03_preflop_aggressor_persists():
     and persists into flop call."""
     bot = HawkEyeBot()
 
-    # Preflop with AA, call_amount=0 -> bot should raise and set aggressor flag
+    # Preflop with AA, call_amount=20 (RFI) -> bot should raise and set aggressor flag
+    # Phase 2: bb_option (call_amount=0) checks; RFI (call_amount=bb) raises
     aa_cards = make_premium_cards()
-    gs_preflop = make_state(board_cards=[], pot_size=30, call_amount=0,
+    gs_preflop = make_state(board_cards=[], pot_size=30, call_amount=20,
                             hole_cards=aa_cards)
     result = bot.get_action(gs_preflop)
     assert result[0] == "raise", f"Expected raise, got {result[0]}"
