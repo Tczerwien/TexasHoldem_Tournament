@@ -396,22 +396,22 @@ The bot cannot know the total number of tournament entrants at runtime. `active_
 | A5 | All 50 test bots are random call/fold (field is weak) | Field Exploitation | If tournament field includes stronger student-built bots, the 0.10 exploit adjustment should be less aggressive. The test bots are confirmed random, but actual tournament opponents are unknown students. |
 | A6 | total_chips_estimate using initial_table_players * 1500 is sufficiently accurate | Stack Role Detection | Multi-table tournaments may have different player counts per table. Acceptable approximation since exact ICM is impossible without opponent stacks anyway. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Total entrant count at runtime**
    - What we know: `active_players` is per-table (table.py line 143). Starting stack is 1500 (config.json). Max 9 per table.
    - What's unclear: With 50 test bots, the tournament has 6+ tables. `active_players` on hand 1 gives the initial table size (8-9), not total tournament size (50).
-   - Recommendation: Use first-hand `active_players` times 1500 for `total_chips_estimate`. This gives per-table average stack, which is what matters for strategic decisions at the current table. The tournament-wide average is unknowable and less relevant.
+   - RESOLVED: Use first-hand `active_players` times 1500 for `total_chips_estimate`. This gives per-table average stack, which is what matters for strategic decisions at the current table. The tournament-wide average is unknowable and less relevant.
 
 2. **ICM multiplier scope -- what counts as "all-in call"?**
    - What we know: CONTEXT.md says "1.4x required equity for all-in calls" at bubble.
    - What's unclear: Does "all-in call" mean only literal all-in (call_amount >= stack) or large commitment (call_amount >= 30% stack)?
-   - Recommendation: Apply to calls where `call_amount >= stack * 0.3`. This captures significant commitment decisions without over-applying to small bets. A literal all-in-only trigger would miss situations where calling 60% of stack is still a major risk at bubble.
+   - RESOLVED: Apply to calls where `call_amount >= stack * 0.3`. This captures significant commitment decisions without over-applying to small bets. A literal all-in-only trigger would miss situations where calling 60% of stack is still a major risk at bubble.
 
 3. **Actual tournament field composition**
    - What we know: The 50 test bots are all random call/fold. The actual tournament will have student-submitted bots.
    - What's unclear: Quality of student submissions. Could range from random bots to sophisticated implementations.
-   - Recommendation: Apply the exploit adjustment (TOURN-07) unconditionally for v1. The default -0.10 EHS adjustment for value betting is profitable against weak fields and only marginally sub-optimal against strong fields (we'd just be value-betting slightly thinner than necessary).
+   - RESOLVED: Apply the exploit adjustment (TOURN-07) unconditionally for v1. The default -0.10 EHS adjustment for value betting is profitable against weak fields and only marginally sub-optimal against strong fields (we'd just be value-betting slightly thinner than necessary).
 
 ## Validation Architecture
 
