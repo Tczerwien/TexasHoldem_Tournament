@@ -161,35 +161,39 @@ def test_safe06_picklable():
     assert bot2._pot_total == 200, f"SAFE-06 pot_total failed: got {bot2._pot_total}"
 
 
-# --- D-01: Tight-passive call/fold logic (postflop fallback) ---
+# --- POST-07: Pot odds call/fold (EHS-driven postflop) ---
 
-def test_d01_call_when_cheap():
+def test_postflop_calls_when_ehs_above_req_eq():
     bot = HawkEyeBot()
-    # call_amount=100, stack_size=1500 -> 6.7% < 15% -> call
-    # Use postflop board (3 cards) since preflop now uses dedicated engine
-    board = [0x00010000, 0x00020000, 0x00040000]  # 3 board cards
-    state = make_state(call_amount=100, stack_size=1500, board_cards=board)
+    # Valid flop board: 4d, 9s, Qc (dry board, three different suits)
+    board = [make_card(2, 4), make_card(7, 1), make_card(10, 8)]
+    state = make_state(call_amount=50, stack_size=1500, board_cards=board)
+    # Mock _ehs for determinism: 0.70 >= req_eq (50/(30+50)=0.625) -> call
+    bot._ehs = lambda hole, board: 0.70
     result = bot._decide(state)
-    assert result == ("call", 0), f"D-01 call failed: got {result}, expected ('call', 0)"
+    assert result == ("call", 0), f"POST-07 call failed: got {result}, expected ('call', 0)"
 
 
-def test_d01_fold_when_expensive():
+def test_postflop_folds_when_ehs_below_req_eq():
     bot = HawkEyeBot()
-    # call_amount=300, stack_size=1500 -> 20% >= 15% -> fold
-    # Use postflop board since preflop now uses dedicated engine
-    board = [0x00010000, 0x00020000, 0x00040000]
+    # Valid flop board: 4d, 9s, Qc
+    board = [make_card(2, 4), make_card(7, 1), make_card(10, 8)]
     state = make_state(call_amount=300, stack_size=1500, board_cards=board)
+    # Mock _ehs for determinism: 0.20 < req_eq (300/(30+300)=0.909) -> fold
+    bot._ehs = lambda hole, board: 0.20
     result = bot._decide(state)
-    assert result == ("fold", 0), f"D-01 fold failed: got {result}, expected ('fold', 0)"
+    assert result == ("fold", 0), f"POST-07 fold failed: got {result}, expected ('fold', 0)"
 
 
 # --- D-03: Check when free (non-premium, postflop) ---
 
 def test_d03_check_when_free():
     bot = HawkEyeBot()
-    # call_amount=0, non-premium hand, postflop -> check (returned as ('call', 0))
-    board = [0x00010000, 0x00020000, 0x00040000]
+    # Valid flop board: 4d, 9s, Qc
+    board = [make_card(2, 4), make_card(7, 1), make_card(10, 8)]
     state = make_state(call_amount=0, board_cards=board)
+    # Mock _ehs for determinism: 0.30 (weak hand, will check)
+    bot._ehs = lambda hole, board: 0.30
     result = bot._decide(state)
     assert result == ("call", 0), f"D-03 failed: got {result}, expected ('call', 0)"
 
@@ -220,8 +224,8 @@ if __name__ == "__main__":
         test_safe07_unknown_action,
         test_safe02_exception_handling,
         test_safe06_picklable,
-        test_d01_call_when_cheap,
-        test_d01_fold_when_expensive,
+        test_postflop_calls_when_ehs_above_req_eq,
+        test_postflop_folds_when_ehs_below_req_eq,
         test_d03_check_when_free,
         test_d02_raise_premium_preflop,
     ]
