@@ -690,6 +690,9 @@ class HawkEyeBot(Bot):
         All returns go through _guard() (T-02-08).
         """
         hole_cards = game_state["hole_cards"]
+        if len(hole_cards) < 2:
+            # Malformed state -- fall back safely
+            return self._guard("fold", 0, game_state)
         call_amount = game_state["call_amount"]
         stack = game_state["stack_size"]
         bb = game_state["blinds"]["big"]
