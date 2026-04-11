@@ -143,37 +143,37 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PRE-07 | Phase 2 | Pending |
 | PRE-08 | Phase 2 | Pending |
 | PRE-09 | Phase 2 | Pending |
-| POST-01 | Phase 3 | Pending |
-| POST-02 | Phase 3 | Pending |
-| POST-03 | Phase 3 | Pending |
-| POST-04 | Phase 3 | Pending |
-| POST-05 | Phase 3 | Pending |
-| POST-06 | Phase 3 | Pending |
-| POST-07 | Phase 3 | Pending |
-| POST-08 | Phase 3 | Pending |
-| POST-09 | Phase 3 | Pending |
-| POST-10 | Phase 3 | Pending |
-| POST-11 | Phase 3 | Pending |
-| POST-12 | Phase 3 | Pending |
-| POST-13 | Phase 3 | Pending |
-| TOURN-01 | Phase 4 | Pending |
-| TOURN-02 | Phase 4 | Pending |
-| TOURN-03 | Phase 4 | Pending |
-| TOURN-04 | Phase 4 | Pending |
-| TOURN-05 | Phase 4 | Pending |
-| TOURN-06 | Phase 4 | Pending |
-| TOURN-07 | Phase 4 | Pending |
 | COMP-01 | Phase 2 | Pending |
 | COMP-02 | Phase 2 | Pending |
 | COMP-03 | Phase 2 | Pending |
 | COMP-04 | Phase 2 | Pending |
 | COMP-05 | Phase 2 | Pending |
+| POST-01 | Phase 3 | Pending |
+| POST-02 | Phase 3 | Pending |
+| POST-03 | Phase 3 | Pending |
+| POST-04 | Phase 3 | Pending |
+| POST-05 | Phase 3 | Pending |
+| POST-06 | Phase 4 | Pending |
+| POST-07 | Phase 4 | Pending |
+| POST-08 | Phase 4 | Pending |
+| POST-09 | Phase 4 | Pending |
+| POST-10 | Phase 4 | Pending |
+| POST-11 | Phase 4 | Pending |
+| POST-12 | Phase 4 | Pending |
+| POST-13 | Phase 4 | Pending |
+| TOURN-01 | Phase 5 | Pending |
+| TOURN-02 | Phase 5 | Pending |
+| TOURN-03 | Phase 5 | Pending |
+| TOURN-04 | Phase 5 | Pending |
+| TOURN-05 | Phase 5 | Pending |
+| TOURN-06 | Phase 5 | Pending |
+| TOURN-07 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 44 total
-- Mapped to phases: 44
+- v1 requirements: 47 total
+- Mapped to phases: 47
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-10*
-*Last updated: 2026-04-10 after initial definition*
+*Last updated: 2026-04-10 after roadmap creation (phases updated from 4 to 5, count corrected from 44 to 47)*
