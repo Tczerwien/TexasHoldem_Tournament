@@ -17,6 +17,12 @@ Win the tournament — maximize aggregate points across 10 simulations by combin
 - [x] Pot accumulator workaround for broken `pot_size` — Validated in Phase 1
 - [x] All instance state picklable (basic Python types only) — Validated in Phase 1
 - [x] Complete bot in single file `players/mtt_bot.py` — Validated in Phase 1
+- [x] Preflop hand classification via Chen formula with precomputed lookup table — Validated in Phase 2
+- [x] Stack mode detection (deep/medium/shallow/push-fold by BB thresholds) — Validated in Phase 2
+- [x] Preflop opening ranges by stack mode — Validated in Phase 2
+- [x] Push-fold shove/call tables (<15BB) — Validated in Phase 2
+- [x] Preflop situational strategy (RFI, facing open, facing 3-bet, BB option, SB complete) — Validated in Phase 2
+- [x] Module-level precomputation of all lookup tables (free of 500ms budget) — Validated in Phase 2
 
 ### Active
 
@@ -104,4 +110,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-11 after Phase 1 completion*
+*Last updated: 2026-04-11 after Phase 2 completion*
