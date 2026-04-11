@@ -707,8 +707,10 @@ class HawkEyeBot(Bot):
             if situation == "bb_option":
                 return self._guard("call", 0, game_state)
 
-            # Facing a shove (call_amount >= 50% of stack)
-            if call_amount >= stack * 0.5:
+            # Push-fold: detect whether villain is effectively all-in
+            # Use call_amount > 8 * bb as proxy for "villain shoved"
+            # (8BB+ call in push-fold territory means villain committed significant stack)
+            if call_amount > bb * 8:
                 villain_bb = call_amount / bb if bb > 0 else 999
                 if CALL_TABLE.get(chen_key, 0) >= villain_bb:
                     return self._guard("call", 0, game_state)
