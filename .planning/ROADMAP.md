@@ -60,7 +60,10 @@ Plans:
   3. Draw detection correctly identifies flush draws, OESDs, gutshots, and combo draws from hole cards + board
   4. Board texture classification distinguishes dry, semi-wet, wet, and paired boards
   5. Effective Hand Strength combines MC equity with draw bonus into a single usable EHS value
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 03-01-PLAN.md -- 7-card hand evaluator (_eval_5, _eval_7) with tuple-based ranking and TDD test suite
+- [ ] 03-02-PLAN.md -- MC equity, draw detection, board texture, EHS combiner and TDD test suite
 
 ### Phase 4: Postflop Decisions
 **Goal**: Bot makes correct postflop betting decisions using the analysis engine from Phase 3
@@ -94,6 +97,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Skeleton and Safety | 2/2 | Complete | 2026-04-11 |
 | 2. Preflop Engine | 0/2 | Planned | - |
-| 3. Postflop Analysis | 0/TBD | Not started | - |
+| 3. Postflop Analysis | 0/2 | Planned | - |
 | 4. Postflop Decisions | 0/TBD | Not started | - |
 | 5. Tournament Awareness | 0/TBD | Not started | - |
