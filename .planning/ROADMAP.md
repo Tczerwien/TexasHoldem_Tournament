@@ -32,8 +32,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Hand boundary detection correctly resets per-hand state and increments hand counter
 **Plans:** 2 plans
 Plans:
-- [ ] 01-01-PLAN.md -- Bot skeleton with safety guards, try/except wrapper, tight-passive logic, and safety test harness
-- [ ] 01-02-PLAN.md -- State tracking (pot accumulator, hand detection, aggressor flag, hand counter) and state test suite
+- [x] 01-01-PLAN.md -- Bot skeleton with safety guards, try/except wrapper, tight-passive logic, and safety test harness
+- [x] 01-02-PLAN.md -- State tracking (pot accumulator, hand detection, aggressor flag, hand counter) and state test suite
 
 ### Phase 2: Preflop Engine
 **Goal**: Bot makes correct preflop decisions based on hand strength, stack depth, and situation
