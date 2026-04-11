@@ -12,7 +12,11 @@ Win the tournament — maximize aggregate points across 10 simulations by combin
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Bot class inheriting from `Bot` with correct import form — Validated in Phase 1
+- [x] Safety guards: try/except wrapper, never fold for free, never use `('check', 0)`, cap raises at stack — Validated in Phase 1
+- [x] Pot accumulator workaround for broken `pot_size` — Validated in Phase 1
+- [x] All instance state picklable (basic Python types only) — Validated in Phase 1
+- [x] Complete bot in single file `players/mtt_bot.py` — Validated in Phase 1
 
 ### Active
 
@@ -100,4 +104,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-10 after initialization*
+*Last updated: 2026-04-11 after Phase 1 completion*
