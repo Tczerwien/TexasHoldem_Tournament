@@ -30,17 +30,26 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "pla
 from mtt_bot import HawkEyeBot
 
 
+_PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41]
+
+
+def make_card(rank_int, suit_int):
+    """Build a treys-encoded card integer.
+
+    rank_int: 0=2, 1=3, ..., 10=Q, 11=K, 12=A
+    suit_int: 1=spades, 2=hearts, 4=diamonds, 8=clubs
+    """
+    return (1 << rank_int << 16) | (suit_int << 12) | (rank_int << 8) | _PRIMES[rank_int]
+
+
 def make_state(board_cards=None, pot_size=30, call_amount=0,
                stack_size=1500, min_raise=20, hole_cards=None):
     """Build a game_state dict for testing."""
     if board_cards is None:
         board_cards = []
     if hole_cards is None:
-        # Non-premium hand: ranks 2 and 7 (different ranks, both < 12)
-        # rank = ((card >> 8) & 0xF) + 2
-        # For rank 2: (2-2) << 8 = 0x0000
-        # For rank 7: (7-2) << 8 = 0x0500
-        hole_cards = [0x00000000, 0x00000500]
+        # Non-premium hand: 2s and 7h (rank_int 0 and 5)
+        hole_cards = [make_card(0, 1), make_card(5, 2)]
     return {
         "hole_cards": hole_cards,
         "board_cards": board_cards,
@@ -54,15 +63,8 @@ def make_state(board_cards=None, pot_size=30, call_amount=0,
 
 
 def make_premium_cards():
-    """Create AA hole cards in treys integer encoding.
-
-    rank = ((card >> 8) & 0xF) + 2
-    For Ace (rank 14): (14 - 2) << 8 = 12 << 8 = 0x0C00
-    Two aces with different suit bits.
-    """
-    ace1 = (12 << 8) | (1 << 12) | 0x01  # Ace of spades-ish
-    ace2 = (12 << 8) | (2 << 12) | 0x02  # Ace of hearts-ish
-    return [ace1, ace2]
+    """Create AA hole cards in full treys integer encoding."""
+    return [make_card(12, 1), make_card(12, 2)]  # Ace of spades, Ace of hearts
 
 
 # --- STATE-01: Pot accumulator across streets ---
