@@ -848,3 +848,113 @@ class HawkEyeBot(Bot):
 
         # Fallback: fold unknown situations
         return self._guard("fold", 0, game_state)
+
+    # --- Phase 3: Postflop Analysis Methods ---
+
+    def _eval_5(self, cards):
+        """POST-01: Evaluate a 5-card poker hand.
+
+        Takes a list of exactly 5 treys-encoded card integers.
+        Returns a classification tuple where lower = better hand (treys convention).
+
+        Tuple format: (class_id, -tiebreaker1, -tiebreaker2, ...)
+          0 = straight flush, 1 = four of a kind, 2 = full house,
+          3 = flush, 4 = straight, 5 = three of a kind,
+          6 = two pair, 7 = one pair, 8 = high card
+
+        Uses manual rank/suit classification per D-01.
+        """
+        # Extract ranks and suits via bit operations
+        ranks = sorted([(c >> 8) & 0xF for c in cards], reverse=True)
+        suits = [(c >> 12) & 0xF for c in cards]
+
+        # Check flush: all 5 suits identical
+        is_flush = suits[0] == suits[1] == suits[2] == suits[3] == suits[4]
+
+        # Build frequency dict
+        freq = {}
+        for r in ranks:
+            freq[r] = freq.get(r, 0) + 1
+
+        # Sort groups by (count, rank) descending for hand classification
+        groups = sorted(freq.items(), key=lambda x: (x[1], x[0]), reverse=True)
+
+        # Check straight: 5 unique ranks with span of 4
+        unique_sorted = sorted(set(ranks))
+        is_straight = False
+        straight_high = -1
+
+        if len(unique_sorted) == 5:
+            # Normal straight: highest - lowest == 4
+            if unique_sorted[4] - unique_sorted[0] == 4:
+                is_straight = True
+                straight_high = unique_sorted[4]
+            # Wheel: A-2-3-4-5 (ranks 12, 0, 1, 2, 3)
+            elif unique_sorted == [0, 1, 2, 3, 12]:
+                is_straight = True
+                straight_high = 3  # 5-high straight
+
+        # Classify hand
+        counts = [g[1] for g in groups]
+
+        # Straight flush
+        if is_flush and is_straight:
+            return (0, -straight_high)
+
+        # Four of a kind
+        if counts[0] == 4:
+            quad_rank = groups[0][0]
+            kicker_rank = groups[1][0]
+            return (1, -quad_rank, -kicker_rank)
+
+        # Full house
+        if counts[0] == 3 and counts[1] == 2:
+            trips_rank = groups[0][0]
+            pair_rank = groups[1][0]
+            return (2, -trips_rank, -pair_rank)
+
+        # Flush (not straight -- already caught above)
+        if is_flush:
+            return (3, -ranks[0], -ranks[1], -ranks[2], -ranks[3], -ranks[4])
+
+        # Straight (not flush -- already caught above)
+        if is_straight:
+            return (4, -straight_high)
+
+        # Three of a kind (no pair beside it -- else would be full house)
+        if counts[0] == 3:
+            trips_rank = groups[0][0]
+            kickers = sorted([g[0] for g in groups[1:]], reverse=True)
+            return (5, -trips_rank, -kickers[0], -kickers[1])
+
+        # Two pair
+        if counts[0] == 2 and counts[1] == 2:
+            high_pair = max(groups[0][0], groups[1][0])
+            low_pair = min(groups[0][0], groups[1][0])
+            kicker = groups[2][0]
+            return (6, -high_pair, -low_pair, -kicker)
+
+        # One pair
+        if counts[0] == 2:
+            pair_rank = groups[0][0]
+            kickers = sorted([g[0] for g in groups[1:]], reverse=True)
+            return (7, -pair_rank, -kickers[0], -kickers[1], -kickers[2])
+
+        # High card
+        return (8, -ranks[0], -ranks[1], -ranks[2], -ranks[3], -ranks[4])
+
+    def _eval_7(self, cards):
+        """POST-01: Evaluate a 7-card poker hand by checking all C(7,5)=21 combinations.
+
+        Takes a list of exactly 7 treys-encoded card integers.
+        Returns the best (lowest) 5-card hand rank tuple found among all 21 combos.
+
+        Uses COMBO_INDICES module-level constant per D-03.
+        """
+        best = (9,)  # Sentinel worse than any real hand (max class is 8)
+        for idx in COMBO_INDICES:
+            five = [cards[i] for i in idx]
+            r = self._eval_5(five)
+            if r < best:
+                best = r
+        return best
