@@ -30,7 +30,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. All raise amounts are capped at stack_size and floored to min_raise -- no illegal bet sizes
   4. Pot accumulator correctly tracks total pot across streets (not just current-street bets)
   5. Hand boundary detection correctly resets per-hand state and increments hand counter
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-01-PLAN.md -- Bot skeleton with safety guards, try/except wrapper, tight-passive logic, and safety test harness
+- [ ] 01-02-PLAN.md -- State tracking (pot accumulator, hand detection, aggressor flag, hand counter) and state test suite
 
 ### Phase 2: Preflop Engine
 **Goal**: Bot makes correct preflop decisions based on hand strength, stack depth, and situation
@@ -86,7 +89,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Skeleton and Safety | 0/TBD | Not started | - |
+| 1. Skeleton and Safety | 0/2 | Planned | - |
 | 2. Preflop Engine | 0/TBD | Not started | - |
 | 3. Postflop Analysis | 0/TBD | Not started | - |
 | 4. Postflop Decisions | 0/TBD | Not started | - |
