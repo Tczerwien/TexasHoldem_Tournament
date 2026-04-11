@@ -79,7 +79,7 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md -- Postflop decision methods (TDD): _postflop, _facing_bet, _bet_or_check, _cbet_threshold, _calc_bet_size with full test suite
 - [x] 04-02-PLAN.md -- Wire _decide() routing to _postflop(), integration tests, full regression verification
-- [ ] 04-03-PLAN.md -- Gap closure: fix stale test_bot_safety.py tests to use valid treys cards and test EHS-driven behavior
+- [x] 04-03-PLAN.md -- Gap closure: fix stale test_bot_safety.py tests to use valid treys cards and test EHS-driven behavior
 
 ### Phase 5: Tournament Awareness
 **Goal**: Bot adjusts strategy for tournament stages, applies ICM pressure at bubble, and exploits weak fields to maximize tournament points
