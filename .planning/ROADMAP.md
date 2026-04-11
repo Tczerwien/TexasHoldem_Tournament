@@ -47,8 +47,8 @@ Plans:
   5. AA/KK 4-bets facing a 3-bet; QQ+/AKs 3-bets facing an open
 **Plans:** 2 plans
 Plans:
-- [ ] 02-01-PLAN.md -- Module-level lookup tables (FULL_DECK, CHEN_TABLE, SHOVE_TABLE, CALL_TABLE) and table validation tests
-- [ ] 02-02-PLAN.md -- Preflop decision engine (_preflop, stack mode, situation detection, 3bet/4bet, raise sizing) and behavior tests
+- [x] 02-01-PLAN.md -- Module-level lookup tables (FULL_DECK, CHEN_TABLE, SHOVE_TABLE, CALL_TABLE) and table validation tests
+- [x] 02-02-PLAN.md -- Preflop decision engine (_preflop, stack mode, situation detection, 3bet/4bet, raise sizing) and behavior tests
 
 ### Phase 3: Postflop Analysis
 **Goal**: Bot can evaluate hand strength, estimate equity via Monte Carlo, detect draws, and classify board texture
