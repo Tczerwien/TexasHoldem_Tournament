@@ -75,7 +75,10 @@ Plans:
   3. Bet sizing varies by street, texture, and situation (33-75% pot) rather than using fixed sizes
   4. Bot shoves instead of betting when the bet would commit 60%+ of its stack (stack commitment rule)
   5. Bot barrels the turn with strong+ hands and value bets the river with strong+ hands
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 04-01-PLAN.md -- Postflop decision methods (TDD): _postflop, _facing_bet, _bet_or_check, _cbet_threshold, _calc_bet_size with full test suite
+- [ ] 04-02-PLAN.md -- Wire _decide() routing to _postflop(), integration tests, full regression verification
 
 ### Phase 5: Tournament Awareness
 **Goal**: Bot adjusts strategy for tournament stages, applies ICM pressure at bubble, and exploits weak fields to maximize tournament points
@@ -98,5 +101,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Skeleton and Safety | 2/2 | Complete | 2026-04-11 |
 | 2. Preflop Engine | 0/2 | Planned | - |
 | 3. Postflop Analysis | 0/2 | Planned | - |
-| 4. Postflop Decisions | 0/TBD | Not started | - |
+| 4. Postflop Decisions | 0/2 | Planned | - |
 | 5. Tournament Awareness | 0/TBD | Not started | - |
