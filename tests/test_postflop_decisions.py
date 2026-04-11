@@ -65,7 +65,7 @@ def make_gs(call_amount, stack_size, min_raise, board_cards, hole_cards=None,
         "stack_size": stack_size,
         "min_raise": min_raise,
         "pot_size": pot_size,
-        "blinds": {"big": big_blind},
+        "blinds": {"big": big_blind, "small": big_blind // 2},
     }
 
 
@@ -461,3 +461,75 @@ class TestEdgeCases:
         # Just verify it returns a valid action tuple
         assert action in ("call", "fold", "raise"), \
             f"Expected valid action, got {action}"
+
+
+# ============================================================
+# Integration Tests: _decide() -> _postflop() routing
+# ============================================================
+class TestDecidePostflopRouting:
+    """Integration tests proving _decide() routes to _postflop() for all
+    postflop streets and the full pipeline (get_action -> _decide ->
+    _postflop -> _facing_bet/_bet_or_check -> _guard) works correctly."""
+
+    def setup_method(self):
+        self.bot = HawkEyeBot()
+        # Set state so _detect_new_hand does not reset anything
+        self.bot._last_board_len = 3  # pretend we are mid-hand on flop
+        self.bot._pot_total = 100
+        self.bot._street_pot = 0
+        self.bot._was_preflop_aggressor = False
+
+    def test_decide_routes_to_postflop(self):
+        """_decide routes to _postflop when board_cards is non-empty.
+        Aggressor with EHS=0.50 on DRY flop -> c-bet (raise)."""
+        gs = make_gs(call_amount=0, stack_size=1000, min_raise=100,
+                     board_cards=DRY_FLOP, pot_size=200)
+        self.bot._was_preflop_aggressor = True
+        self.bot._last_board_len = 3  # same street, no pot accumulation reset
+        self.bot._ehs = lambda hole, board: 0.50
+        self.bot._classify_board = lambda board: "DRY"
+        action, amount = self.bot._decide(gs)
+        # EHS 0.50 >= DRY c-bet threshold 0.35 -> should raise (c-bet)
+        assert action == "raise", \
+            f"Expected raise (c-bet via _postflop), got {action}"
+
+    def test_decide_postflop_fold(self):
+        """_decide -> _postflop -> _facing_bet -> fold when EHS far below req_eq."""
+        gs = make_gs(call_amount=200, stack_size=1000, min_raise=200,
+                     board_cards=DRY_FLOP, pot_size=300)
+        self.bot._last_board_len = 3
+        self.bot._ehs = lambda hole, board: 0.10
+        self.bot._classify_board = lambda board: "DRY"
+        action, amount = self.bot._decide(gs)
+        # req_eq = 200 / (est_pot + 200). est_pot = pot_total + pot_size = 100 + 300 = 400
+        # req_eq = 200 / 600 = 0.333. EHS 0.10 < 0.333 -> fold
+        assert action == "fold" and amount == 0, \
+            f"Expected (fold, 0), got ({action}, {amount})"
+
+    def test_decide_postflop_call(self):
+        """_decide -> _postflop -> _facing_bet -> call when EHS above req_eq but below MONSTER."""
+        gs = make_gs(call_amount=50, stack_size=1000, min_raise=100,
+                     board_cards=DRY_FLOP, pot_size=150)
+        self.bot._last_board_len = 3
+        self.bot._ehs = lambda hole, board: 0.45
+        self.bot._classify_board = lambda board: "DRY"
+        action, amount = self.bot._decide(gs)
+        # est_pot = pot_total + pot_size = 100 + 150 = 250
+        # req_eq = 50 / (250 + 50) = 50 / 300 = 0.167. EHS 0.45 >= 0.167 -> call
+        # EHS 0.45 < 0.85 (MONSTER) -> not raise
+        assert action == "call" and amount == 0, \
+            f"Expected (call, 0), got ({action}, {amount})"
+
+    def test_decide_preflop_unchanged(self):
+        """_decide still routes to _preflop when board_cards is empty (regression test)."""
+        gs = make_gs(call_amount=100, stack_size=1000, min_raise=200,
+                     board_cards=[], pot_size=150,
+                     hole_cards=[make_card("Ah"), make_card("Kh")])
+        # Reset state for preflop
+        self.bot._last_board_len = 0
+        self.bot._pot_total = 0
+        self.bot._street_pot = 0
+        action, amount = self.bot._decide(gs)
+        # AKs is a premium hand -> should not fold preflop
+        assert action in ("call", "raise"), \
+            f"Expected call or raise for AKs preflop, got {action}"

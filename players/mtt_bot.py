@@ -566,10 +566,10 @@ class HawkEyeBot(Bot):
         return self._pot_total + self._street_pot
 
     def _decide(self, game_state):
-        """Main decision router: preflop engine or postflop fallback.
+        """Main decision router: preflop engine or postflop decision engine.
 
-        D-11: Routes to _preflop() when board is empty, tight-passive
-        fallback for postflop (Phase 3/4 will replace postflop logic).
+        D-10: Routes to _preflop() when board is empty,
+        _postflop() when board cards are present.
         """
         # 1. Detect hand boundary and reset state
         self._detect_new_hand(game_state)
@@ -581,14 +581,7 @@ class HawkEyeBot(Bot):
         if len(game_state["board_cards"]) == 0:
             return self._preflop(game_state, est_pot)
         else:
-            # Phase 3/4 will add postflop logic. For now, use tight-passive fallback.
-            call_amount = game_state["call_amount"]
-            stack_size = game_state["stack_size"]
-            if call_amount == 0:
-                return self._guard("call", 0, game_state)
-            if call_amount < stack_size * 0.15:
-                return self._guard("call", 0, game_state)
-            return self._guard("fold", 0, game_state)
+            return self._postflop(game_state, est_pot)
 
     def _is_premium(self, hole_cards):
         """D-02: Detect premium hands (AA, KK, QQ) from treys integer encoding.
