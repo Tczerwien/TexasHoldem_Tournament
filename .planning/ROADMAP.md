@@ -62,8 +62,8 @@ Plans:
   5. Effective Hand Strength combines MC equity with draw bonus into a single usable EHS value
 **Plans:** 2 plans
 Plans:
-- [ ] 03-01-PLAN.md -- 7-card hand evaluator (_eval_5, _eval_7) with tuple-based ranking and TDD test suite
-- [ ] 03-02-PLAN.md -- MC equity, draw detection, board texture, EHS combiner and TDD test suite
+- [x] 03-01-PLAN.md -- 7-card hand evaluator (_eval_5, _eval_7) with tuple-based ranking and TDD test suite
+- [x] 03-02-PLAN.md -- MC equity, draw detection, board texture, EHS combiner and TDD test suite
 
 ### Phase 4: Postflop Decisions
 **Goal**: Bot makes correct postflop betting decisions using the analysis engine from Phase 3
