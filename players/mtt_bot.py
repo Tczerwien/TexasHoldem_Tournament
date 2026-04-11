@@ -84,6 +84,57 @@ class HawkEyeBot(Bot):
         # 6. Fallback: unrecognized action -> call (safe default)
         return ("call", 0)
 
+    def _detect_new_hand(self, game_state):
+        """STATE-02, STATE-04: Detect hand boundaries and reset per-hand state.
+
+        Uses board_cards length transitions to detect new hands:
+        - First call ever: _last_board_len == -1 (sentinel) -> initialize
+        - New hand: board went from non-empty back to empty
+        - Same hand: no transition detected, do nothing
+        """
+        board_len = len(game_state["board_cards"])
+
+        if self._last_board_len == -1:
+            # First call ever in this simulation (sentinel)
+            self._hand_num = 1
+            self._pot_total = 0
+            self._street_pot = 0
+            self._was_preflop_aggressor = False
+            return
+
+        if board_len == 0 and self._last_board_len > 0:
+            # Board went from having cards to empty = new hand (D-07)
+            self._hand_num += 1  # STATE-04
+            # Reset per-hand state (D-09)
+            self._pot_total = 0
+            self._street_pot = 0
+            self._was_preflop_aggressor = False  # STATE-03 reset
+
+    def _update_pot(self, game_state):
+        """STATE-01: Track total pot across streets.
+
+        Engine's pot_size only shows current-street bets (D-08).
+        This method accumulates pot across streets additively.
+
+        Returns estimated total pot (locked streets + current street).
+        """
+        board_len = len(game_state["board_cards"])
+
+        # Detect new street: board grew (D-08 additive tracking)
+        if board_len > self._last_board_len and self._last_board_len >= 0:
+            # Previous street's bets are now locked in
+            self._pot_total += self._street_pot
+            self._street_pot = 0
+
+        # Read current street's running total from engine
+        self._street_pot = game_state["pot_size"]
+
+        # Update board length tracker
+        self._last_board_len = board_len
+
+        # Return estimated total pot
+        return self._pot_total + self._street_pot
+
     def _decide(self, game_state):
         """Tight-passive decision logic with premium hand raises.
 
@@ -91,6 +142,12 @@ class HawkEyeBot(Bot):
         D-02: Raise with premium hands (AA/KK/QQ) preflop.
         D-03: Always check when call_amount is 0 (non-premium).
         """
+        # 1. Detect hand boundary and reset state
+        self._detect_new_hand(game_state)
+
+        # 2. Update pot accumulator
+        est_pot = self._update_pot(game_state)
+
         call_amount = game_state["call_amount"]
         stack_size = game_state["stack_size"]
         min_raise = game_state["min_raise"]
@@ -105,6 +162,8 @@ class HawkEyeBot(Bot):
                 raise_amt = max(min_raise, big_blind * 3)
                 if raise_amt > stack_size:
                     raise_amt = stack_size
+                if len(board_cards) == 0:  # only set on preflop raises
+                    self._was_preflop_aggressor = True
                 return self._guard("raise", raise_amt, game_state)
             return self._guard("call", 0, game_state)
 
@@ -113,6 +172,8 @@ class HawkEyeBot(Bot):
             raise_amt = max(min_raise, call_amount * 3)
             if raise_amt > stack_size:
                 raise_amt = stack_size
+            if len(board_cards) == 0:  # only set on preflop raises
+                self._was_preflop_aggressor = True
             return self._guard("raise", raise_amt, game_state)
 
         # D-01: Tight-passive -- call if cheap (< 15% of stack), fold otherwise
