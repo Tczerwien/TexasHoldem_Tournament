@@ -1,5 +1,6 @@
 from engine.player_interface import Bot
 import math
+import random
 
 # === CONSTANTS ===
 _PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41]
@@ -958,3 +959,222 @@ class HawkEyeBot(Bot):
             if r < best:
                 best = r
         return best
+
+    def _mc_equity(self, hole, board):
+        """POST-02, D-04, D-09: Monte Carlo equity estimation.
+
+        Samples random opponent hands and remaining board cards to estimate
+        hero's equity (probability of winning) against a random opponent.
+
+        Uses random.sample for MC inner loop (50x faster than numpy for
+        small samples per CLAUDE.md). Fixed iteration caps: 300 flop,
+        400 turn, 500 river.
+
+        Args:
+            hole: list of 2 treys-encoded card integers (hero's hole cards)
+            board: list of 3-5 treys-encoded card integers (community cards)
+
+        Returns:
+            float: equity between 0.0 and 1.0
+        """
+        # Guard: preflop or invalid board -> return 0.5 (Pitfall 5)
+        if len(board) < 3:
+            return 0.5
+
+        # Build known set for O(1) exclusion (T-03-04 mitigation)
+        known = set(hole + board)
+        remaining = [c for c in FULL_DECK if c not in known]
+
+        # Fixed iteration caps per D-04
+        board_len = len(board)
+        if board_len == 3:
+            iters = 300   # Flop
+        elif board_len == 4:
+            iters = 400   # Turn
+        else:
+            iters = 500   # River
+
+        # Cards needed: 2 opponent hole + remaining board cards
+        need = 2 + (5 - board_len)
+
+        wins = 0
+        ties = 0
+        for _ in range(iters):
+            draw = random.sample(remaining, need)
+            opp_hole = draw[:2]
+            extra_board = draw[2:]
+            full_board = board + extra_board
+            my_rank = self._eval_7(hole + full_board)
+            opp_rank = self._eval_7(opp_hole + full_board)
+            # Lower tuple = better hand (Pitfall 7)
+            if my_rank < opp_rank:
+                wins += 1
+            elif my_rank == opp_rank:
+                ties += 1
+
+        return (wins + ties * 0.5) / iters
+
+    def _detect_draws(self, hole, board):
+        """POST-03, D-05: Detect draw types from hole + board cards.
+
+        Checks for flush draws, open-ended straight draws (OESD),
+        gutshots, and combo draws. Handles edge cases: made flush
+        suppresses flush draw (Pitfall 2), ace boundaries suppress
+        OESD (Pitfall 3).
+
+        Args:
+            hole: list of 2 treys-encoded card integers
+            board: list of 3-5 treys-encoded card integers
+
+        Returns:
+            dict with keys: flush_draw, oesd, gutshot, combo_draw (all bool)
+        """
+        combined = hole + board
+
+        # --- Flush draw detection ---
+        suit_counts = {}
+        for c in combined:
+            s = (c >> 12) & 0xF
+            suit_counts[s] = suit_counts.get(s, 0) + 1
+
+        has_made_flush = any(cnt >= 5 for cnt in suit_counts.values())
+        has_flush_draw = any(cnt == 4 for cnt in suit_counts.values())
+        # Pitfall 2: made flush suppresses flush draw
+        if has_made_flush:
+            has_flush_draw = False
+
+        # --- Straight draw detection ---
+        unique_ranks = sorted(set((c >> 8) & 0xF for c in combined))
+        # Add ace-low (-1) if ace present for wheel detection
+        if 12 in unique_ranks:
+            unique_ranks = [-1] + unique_ranks
+
+        has_oesd = False
+        has_gutshot = False
+        # Check for made straight (5+ consecutive) to suppress draws
+        has_made_straight = False
+        for i in range(len(unique_ranks) - 4):
+            if unique_ranks[i + 4] - unique_ranks[i] == 4:
+                has_made_straight = True
+                break
+
+        if not has_made_straight:
+            # Scan all windows of 4 ranks
+            for i in range(len(unique_ranks)):
+                for j in range(i + 3, len(unique_ranks)):
+                    if j - i != 3:
+                        continue  # only look at exactly 4 ranks
+                    span = unique_ranks[j] - unique_ranks[i]
+                    if span == 3:
+                        # 4 consecutive ranks -> OESD if both ends open
+                        low_end = unique_ranks[i] - 1
+                        high_end = unique_ranks[j] + 1
+                        # Pitfall 3: both ends must be valid ranks (0-12)
+                        if low_end >= 0 and high_end <= 12:
+                            has_oesd = True
+                    elif span == 4:
+                        # 4 ranks spanning 5 -> gutshot (one gap)
+                        has_gutshot = True
+
+        has_combo = has_flush_draw and (has_oesd or has_gutshot)
+
+        return {
+            "flush_draw": has_flush_draw,
+            "oesd": has_oesd,
+            "gutshot": has_gutshot,
+            "combo_draw": has_combo,
+        }
+
+    def _classify_board(self, board):
+        """POST-05, D-06: Board texture classification.
+
+        Classifies the community cards as PAIRED, DRY, SEMI_WET, or WET.
+        PAIRED takes priority over all other classifications.
+
+        Args:
+            board: list of 3-5 treys-encoded card integers
+
+        Returns:
+            str: one of 'PAIRED', 'DRY', 'SEMI_WET', 'WET'
+        """
+        ranks = [(c >> 8) & 0xF for c in board]
+        suits = [(c >> 12) & 0xF for c in board]
+
+        # Check PAIRED first (takes priority)
+        rank_counts = {}
+        for r in ranks:
+            rank_counts[r] = rank_counts.get(r, 0) + 1
+        if any(c >= 2 for c in rank_counts.values()):
+            return "PAIRED"
+
+        # Flush potential: 3+ cards share a suit on board
+        suit_counts = {}
+        for s in suits:
+            suit_counts[s] = suit_counts.get(s, 0) + 1
+        max_suit = max(suit_counts.values())
+        flush_possible = max_suit >= 3
+
+        # Connectedness: check if 3 board ranks fall within a tight span
+        unique_ranks = sorted(set(ranks))
+        if 12 in unique_ranks:
+            unique_ranks_ext = [-1] + unique_ranks
+        else:
+            unique_ranks_ext = unique_ranks
+
+        connected = False
+        # Check for any 3 consecutive board ranks within span <= 3
+        # (Pitfall 4: avoid over-classification)
+        for i in range(len(unique_ranks_ext) - 2):
+            span = unique_ranks_ext[i + 2] - unique_ranks_ext[i]
+            if span <= 3:
+                connected = True
+                break
+
+        if flush_possible and connected:
+            return "WET"
+        elif flush_possible or connected:
+            return "SEMI_WET"
+        else:
+            return "DRY"
+
+    def _ehs(self, hole, board):
+        """POST-04, D-07: Effective Hand Strength combining equity with draw bonus.
+
+        EHS = mc_equity + draw_bonus, capped at 1.0.
+        On river (5 board cards), no draw bonus is applied since no cards
+        remain to complete draws.
+
+        Draw bonuses (in priority order):
+        - combo_draw: 0.09 (flush + straight draw)
+        - flush_draw: 0.06
+        - oesd: 0.05
+        - gutshot: 0.03
+
+        Args:
+            hole: list of 2 treys-encoded card integers
+            board: list of 3-5 treys-encoded card integers
+
+        Returns:
+            float: effective hand strength between 0.0 and 1.0
+        """
+        equity = self._mc_equity(hole, board)
+
+        # No draw bonus on river (no cards to come)
+        if len(board) >= 5:
+            return equity
+
+        draws = self._detect_draws(hole, board)
+
+        # Draw bonus in priority order (combo first since it includes flush+straight)
+        if draws["combo_draw"]:
+            bonus = 0.09
+        elif draws["flush_draw"]:
+            bonus = 0.06
+        elif draws["oesd"]:
+            bonus = 0.05
+        elif draws["gutshot"]:
+            bonus = 0.03
+        else:
+            bonus = 0.0
+
+        return min(equity + bonus, 1.0)

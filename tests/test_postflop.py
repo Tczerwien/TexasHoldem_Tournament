@@ -418,11 +418,10 @@ class TestBoardTexture:
         assert result == "WET", f"Monotone connected board should be 'WET', got {result}"
 
     def test_semi_wet_flush_possible(self):
-        """Two-tone connected -> 'SEMI_WET'."""
-        board = [make_card("9h"), make_card("Th"), make_card("2d")]
+        """Two-tone connected -> 'SEMI_WET' (connected only, flush needs 3+ of suit)."""
+        board = [make_card("9h"), make_card("Th"), make_card("8d")]
         result = self.bot._classify_board(board)
-        # 9h-Th are connected and two hearts, but only 2 of a suit is not flush_possible (need 3)
-        # Actually: 9-T are connected, so connected=True. Only 2 hearts = flush_possible=False.
+        # Ranks 6(8), 7(9), 8(T) span=2, connected=True. Only 2 hearts = flush_possible=False.
         # So this is SEMI_WET (connected only).
         assert result == "SEMI_WET", f"Connected two-tone board should be 'SEMI_WET', got {result}"
 
