@@ -45,7 +45,10 @@ Plans:
   3. Bot correctly identifies situation (RFI, facing open, facing 3-bet, BB option, SB complete) and adjusts hand requirements
   4. All lookup tables (Chen scores, shove table, call table, full deck) are precomputed at module level and do not consume per-decision time budget
   5. AA/KK 4-bets facing a 3-bet; QQ+/AKs 3-bets facing an open
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 02-01-PLAN.md -- Module-level lookup tables (FULL_DECK, CHEN_TABLE, SHOVE_TABLE, CALL_TABLE) and table validation tests
+- [ ] 02-02-PLAN.md -- Preflop decision engine (_preflop, stack mode, situation detection, 3bet/4bet, raise sizing) and behavior tests
 
 ### Phase 3: Postflop Analysis
 **Goal**: Bot can evaluate hand strength, estimate equity via Monte Carlo, detect draws, and classify board texture
@@ -89,8 +92,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Skeleton and Safety | 0/2 | Planned | - |
-| 2. Preflop Engine | 0/TBD | Not started | - |
+| 1. Skeleton and Safety | 2/2 | Complete | 2026-04-11 |
+| 2. Preflop Engine | 0/2 | Planned | - |
 | 3. Postflop Analysis | 0/TBD | Not started | - |
 | 4. Postflop Decisions | 0/TBD | Not started | - |
 | 5. Tournament Awareness | 0/TBD | Not started | - |
