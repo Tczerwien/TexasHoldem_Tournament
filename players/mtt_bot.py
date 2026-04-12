@@ -459,6 +459,7 @@ class HawkEyeBot(Bot):
         self._pot_total = 0  # Accumulated pot from prior streets
         self._street_pot = 0  # Current street's pot reading
         self._was_preflop_aggressor = False  # STATE-03 flag
+        self._initial_table_players = 0  # TOURN-03: captured on first hand
 
     def get_action(self, game_state):
         """SAFE-02: try/except wrapper -- no exception ever escapes."""
@@ -530,6 +531,7 @@ class HawkEyeBot(Bot):
             self._pot_total = 0
             self._street_pot = 0
             self._was_preflop_aggressor = False
+            self._initial_table_players = game_state["active_players"]  # TOURN-03
             return
 
         if board_len == 0 and self._last_board_len > 0:
@@ -619,6 +621,49 @@ class HawkEyeBot(Bot):
             return "shallow"
         else:
             return "push_fold"
+
+    # === PHASE 5: TOURNAMENT AWARENESS ===
+
+    def _get_tournament_stage(self, game_state):
+        """TOURN-01: Detect tournament stage from active players and blind level.
+
+        Priority: player count first (heads_up/itm/bubble), then blind level
+        for multi-player stages (early/middle/late).
+
+        Returns one of: 'heads_up', 'itm', 'bubble', 'early', 'middle', 'late'.
+        """
+        n = game_state["active_players"]
+        if n <= 2:
+            return "heads_up"
+        if n <= 3:
+            return "itm"
+        if n <= 4:
+            return "bubble"
+        bb = game_state["blinds"]["big"]
+        if bb <= 30:
+            return "early"
+        if bb <= 100:
+            return "middle"
+        return "late"
+
+    def _get_stack_role(self, game_state):
+        """TOURN-03: Classify hero stack as big/medium/short relative to avg.
+
+        Uses _initial_table_players * 1500 as total chip count (chips are
+        conserved in tournament). Average = total / active_players.
+
+        Returns one of: 'big' (>= 1.5x avg), 'short' (<= 0.5x avg), 'medium'.
+        """
+        total_chips = self._initial_table_players * 1500
+        n = game_state["active_players"]
+        avg_stack = total_chips / n
+        my_stack = game_state["stack_size"]
+        if my_stack >= avg_stack * 1.5:
+            return "big"
+        elif my_stack <= avg_stack * 0.5:
+            return "short"
+        else:
+            return "medium"
 
     def _detect_situation(self, game_state):
         """PRE-06: Infer preflop situation from call_amount relative to blinds."""
