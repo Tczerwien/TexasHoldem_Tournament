@@ -93,8 +93,8 @@ Plans:
   5. In heads-up play, bot opens 55%+ of hands and correctly handles the button-posts-BB engine quirk
 **Plans:** 2 plans
 Plans:
-- [ ] 05-01-PLAN.md -- TDD stage detection and stack role methods with unit tests
-- [ ] 05-02-PLAN.md -- Wire tournament awareness into preflop/postflop decisions, ICM multiplier, exploit adjustments, and regression tests
+- [x] 05-01-PLAN.md -- TDD stage detection and stack role methods with unit tests
+- [x] 05-02-PLAN.md -- Wire tournament awareness into preflop/postflop decisions, ICM multiplier, exploit adjustments, and regression tests
 
 ## Progress
 
