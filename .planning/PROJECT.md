@@ -2,34 +2,57 @@
 
 ## What This Is
 
-A competitive Texas Hold'em poker bot for the IIT Poker Club Multi-Table Tournament (MTT). The bot competes against all submitted student bots across 10 simulations, with points awarded to top-3 finishers (50/30/20). The goal is to win the tournament by maximizing aggregate points through consistent top-3 finishes with emphasis on first-place wins.
+A competitive Texas Hold'em poker bot (HawkEyeBot) for the IIT Poker Club Multi-Table Tournament (MTT). The bot competes against all submitted student bots across 10 simulations, with points awarded to top-3 finishers (50/30/20). Built as a single 1,449-LOC Python file with 217 tests, the bot combines preflop hand evaluation, Monte Carlo postflop equity, and tournament-aware strategy adjustments to maximize aggregate points.
 
 ## Core Value
 
 Win the tournament — maximize aggregate points across 10 simulations by combining a high top-3 rate (~65%+) with aggressive play when in the money to push for 1st place finishes.
 
+## Current State
+
+**v1.0 shipped** — 2026-04-12. Submission-ready bot with all 47 requirements validated.
+
+- 1,449 LOC in `players/mtt_bot.py`
+- 2,698 LOC across 6 test files (217 tests, all passing)
+- ~90ms worst-case decision time (82% of 500ms budget unused)
+- Preflop: Chen formula + push-fold tables + situational strategy
+- Postflop: 7-card evaluator + MC equity (300-500 iter) + draw detection + c-bets + pot odds
+- Tournament: stage detection, ICM bubble pressure, heads-up widening, field exploitation
+
 ## Requirements
 
 ### Validated
 
-- [x] Bot class inheriting from `Bot` with correct import form — Validated in Phase 1
-- [x] Safety guards: try/except wrapper, never fold for free, never use `('check', 0)`, cap raises at stack — Validated in Phase 1
-- [x] Pot accumulator workaround for broken `pot_size` — Validated in Phase 1
-- [x] All instance state picklable (basic Python types only) — Validated in Phase 1
-- [x] Complete bot in single file `players/mtt_bot.py` — Validated in Phase 1
-- [x] Preflop hand classification via Chen formula with precomputed lookup table — Validated in Phase 2
-- [x] Stack mode detection (deep/medium/shallow/push-fold by BB thresholds) — Validated in Phase 2
-- [x] Preflop opening ranges by stack mode — Validated in Phase 2
-- [x] Push-fold shove/call tables (<15BB) — Validated in Phase 2
-- [x] Preflop situational strategy (RFI, facing open, facing 3-bet, BB option, SB complete) — Validated in Phase 2
-- [x] Module-level precomputation of all lookup tables (free of 500ms budget) — Validated in Phase 2
-- [x] Tournament stage detection (early/middle/late/bubble/ITM/heads-up from blind level + active_players) — Validated in Phase 5
-- [x] ICM multiplier at bubble (1.4x call threshold for all-in decisions) — Validated in Phase 5
-- [x] Stack role classification (big/medium/short relative to average) — Validated in Phase 5
+- [x] Bot class inheriting from `Bot` with correct import form — v1.0
+- [x] Safety guards: try/except wrapper, never fold for free, never use `('check', 0)`, cap raises at stack — v1.0
+- [x] Pot accumulator workaround for broken `pot_size` — v1.0
+- [x] All instance state picklable (basic Python types only) — v1.0
+- [x] Complete bot in single file `players/mtt_bot.py` — v1.0
+- [x] Preflop hand classification via Chen formula with precomputed lookup table — v1.0
+- [x] Stack mode detection (deep/medium/shallow/push-fold by BB thresholds) — v1.0
+- [x] Preflop opening ranges by stack mode — v1.0
+- [x] Push-fold shove/call tables (<15BB) — v1.0
+- [x] Preflop situational strategy (RFI, facing open, facing 3-bet, BB option, SB complete) — v1.0
+- [x] Module-level precomputation of all lookup tables (free of 500ms budget) — v1.0
+- [x] 7-card hand evaluator with C(7,5)=21 combination evaluation — v1.0
+- [x] Monte Carlo equity estimation (300/400/500 iterations by street) — v1.0
+- [x] Draw detection (flush draw, OESD, gutshot, combo) — v1.0
+- [x] Board texture classification (dry/semi-wet/wet/paired) — v1.0
+- [x] C-bet logic with preflop aggressor tracking — v1.0
+- [x] Pot odds call/fold decisions — v1.0
+- [x] Bet sizing system (33-75% pot by street/texture/situation) — v1.0
+- [x] Stack commitment rule (bet >= 60% stack -> shove) — v1.0
+- [x] Tournament stage detection (early/middle/late/bubble/ITM/heads-up) — v1.0
+- [x] ICM multiplier at bubble (1.4x call threshold for all-in decisions) — v1.0
+- [x] Stack role classification (big/medium/short relative to average) — v1.0
+- [x] Bubble play adjustments (big stack widens, medium tightens) — v1.0
+- [x] ITM aggression switch (release ICM pressure, fight for 1st) — v1.0
+- [x] Heads-up range widening (55%+ opening) — v1.0
+- [x] Field exploitation (0.10 EHS threshold reduction for value bets) — v1.0
 
 ### Active
 
-All v1.0 milestone requirements have been implemented and validated across Phases 1-5.
+No active requirements. Next milestone will define new requirements.
 
 ### Out of Scope
 
@@ -38,6 +61,9 @@ All v1.0 milestone requirements have been implemented and validated across Phase
 - Dynamic raise sizing based on opponent tendencies — no data available
 - Machine learning / neural network approaches — blocked libraries
 - Multi-file architecture — single file submission required
+- Time-based logic — `time` module blocked; use fixed iteration counts
+- Limping preflop — dominated strategy in tournament poker
+- Slow-playing monsters — against calling-station field, value betting is strictly superior
 
 ## Context
 
@@ -51,11 +77,10 @@ All v1.0 milestone requirements have been implemented and validated across Phase
   - `position` field advertised in docstring but NOT in actual game_state
 - **Card encoding:** Treys integer format, decoded via bit operations (rank: `((card >> 8) & 0xF) + 2`, suit: `(card >> 12) & 0xF`)
 - **Allowed imports:** `math`, `random`, `numpy`, `pandas`, `engine.player_interface` — AST-scanned, violations block the bot for all 10 sims
-- **The PDF template showing a bare `get_action()` function is misleading** — engine loader requires a class inheriting from Bot
 
 ## Constraints
 
-- **Deadline**: April 23, 2026 — 13 days from project start
+- **Deadline**: April 23, 2026
 - **Runtime**: 500ms hard timeout per decision — forced fold on timeout
 - **Libraries**: Only math, random, numpy, pandas, engine.player_interface
 - **File format**: Single .py file in `players/` directory
@@ -67,29 +92,14 @@ All v1.0 milestone requirements have been implemented and validated across Phase
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Single Bot class + module-level helpers | Engine scans for Bot subclasses; multiple would register as separate players | -- Pending |
-| Chen formula for preflop hand ranking | Fast, well-established, precomputable into 169-entry lookup table | -- Pending |
-| Monte Carlo for postflop equity | Only viable approach within allowed libraries; iteration-capped for timing | -- Pending |
-| Manual 7-card evaluator | Treys library blocked; must implement rank/suit evaluation from scratch | -- Pending |
-| Balanced-aggressive tournament strategy | Math shows 65% top-3 rate at avg 1.6th finish = ~303 pts over 10 sims (best EV) | -- Pending |
-| Pot accumulator workaround | pot_size bug is confirmed from source; must track cross-street pot manually | -- Pending |
-
-## Evolution
-
-This document evolves at phase transitions and milestone boundaries.
-
-**After each phase transition** (via `/gsd-transition`):
-1. Requirements invalidated? -> Move to Out of Scope with reason
-2. Requirements validated? -> Move to Validated with phase reference
-3. New requirements emerged? -> Add to Active
-4. Decisions to log? -> Add to Key Decisions
-5. "What This Is" still accurate? -> Update if drifted
-
-**After each milestone** (via `/gsd-complete-milestone`):
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
+| Single Bot class + module-level helpers | Engine scans for Bot subclasses; multiple would register as separate players | ✓ Good — clean architecture, single entry point |
+| Chen formula for preflop hand ranking | Fast, well-established, precomputable into 169-entry lookup table | ✓ Good — <1ms preflop decisions |
+| Monte Carlo for postflop equity | Only viable approach within allowed libraries; iteration-capped for timing | ✓ Good — ~60-80ms, well within budget |
+| Manual 7-card evaluator | Treys library blocked; must implement rank/suit evaluation from scratch | ✓ Good — tuple-based ranking works correctly |
+| Balanced-aggressive tournament strategy | Math shows 65% top-3 rate at avg 1.6th finish = ~303 pts over 10 sims (best EV) | ✓ Good — implemented across all stages |
+| Pot accumulator workaround | pot_size bug is confirmed from source; must track cross-street pot manually | ✓ Good — accurate pot tracking |
+| Field exploitation (0.10 EHS reduction) | Test field is weak (random/call bots); thinner value bets extract more chips | ✓ Good — applied globally via exploit_adj |
+| ICM 1.4x bubble multiplier | Survival into money is worth more than marginal chip gain at bubble | ✓ Good — significant calls require 40% more equity |
 
 ---
-*Last updated: 2026-04-12 after Phase 5 completion — all v1.0 milestone phases complete*
+*Last updated: 2026-04-12 after v1.0 milestone*
