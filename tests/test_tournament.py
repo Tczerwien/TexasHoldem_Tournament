@@ -404,5 +404,65 @@ class TestExploitAdjustment(unittest.TestCase):
         self.assertEqual(action, "call")  # call with 0 = check
 
 
+class TestRegression(unittest.TestCase):
+    """Verify Phase 5 changes do NOT alter early/middle stage behavior."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+        self.bot._initial_table_players = 10
+        self.bot._was_preflop_aggressor = False
+        self.bot._pot_accumulator = 0
+
+    def test_early_stage_rfi_threshold_unchanged(self):
+        """active_players=8, bb=20 (early), deep stack -- chen=6 opens, chen=5 folds.
+
+        In early stage, rfi_threshold should still be 6 for deep mode.
+        """
+        # chen=6 hand: KTo (11, 8, False) -> opens
+        hole_open = [_find_card(11, 0), _find_card(8, 1)]
+        gs = _make_preflop_gs(active_players=8, bb=20, sb=10, stack=1500,
+                              hole_cards=hole_open, call_amount=20)
+        action, _ = self.bot._preflop(gs, 30)
+        self.assertEqual(action, "raise")
+
+        # chen=5 hand: A5o (12, 3, False) -> folds
+        self.bot._was_preflop_aggressor = False
+        hole_fold = [_find_card(12, 0), _find_card(3, 1)]
+        gs2 = _make_preflop_gs(active_players=8, bb=20, sb=10, stack=1500,
+                               hole_cards=hole_fold, call_amount=20)
+        action2, _ = self.bot._preflop(gs2, 30)
+        self.assertEqual(action2, "fold")
+
+    def test_early_stage_facing_bet_no_icm(self):
+        """active_players=8, bb=20 (early), _facing_bet -- no ICM multiplier."""
+        gs = _make_game_state(active_players=8, bb=20, sb=10, stack=3000,
+                              call_amount=1000)
+        # req_eq = 1000 / (2000+1000) = 0.333, ehs=0.40 >= 0.333 -> call
+        action, _ = self.bot._facing_bet(gs, 2000, 0.40, "dry", 4)
+        self.assertEqual(action, "call")
+
+    def test_early_stage_value_bet_threshold(self):
+        """active_players=8, bb=20 (early), _bet_or_check with ehs=0.58 -> bets.
+
+        exploit_adj applies to ALL stages (D-07), so 0.58 > 0.55 -> bets.
+        """
+        gs = _make_game_state(active_players=8, bb=20, sb=10, stack=3000,
+                              call_amount=0)
+        action, _ = self.bot._bet_or_check(gs, 500, 0.58, "dry", 4)
+        self.assertEqual(action, "raise")
+
+    def test_middle_stage_no_bubble_adjustment(self):
+        """active_players=6, bb=50 (middle) -- rfi_threshold not modified.
+
+        Middle stage should use base rfi_threshold (6 deep, 7 medium).
+        chen=6 with deep stack -> opens (threshold 6, chen 6 >= 6).
+        """
+        hole = [_find_card(11, 0), _find_card(8, 1)]  # KTo: chen=6
+        gs = _make_preflop_gs(active_players=6, bb=50, sb=25, stack=3000,
+                              hole_cards=hole, call_amount=50)
+        action, _ = self.bot._preflop(gs, 75)
+        self.assertEqual(action, "raise")
+
+
 if __name__ == "__main__":
     unittest.main()
