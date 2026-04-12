@@ -23,31 +23,13 @@ Win the tournament — maximize aggregate points across 10 simulations by combin
 - [x] Push-fold shove/call tables (<15BB) — Validated in Phase 2
 - [x] Preflop situational strategy (RFI, facing open, facing 3-bet, BB option, SB complete) — Validated in Phase 2
 - [x] Module-level precomputation of all lookup tables (free of 500ms budget) — Validated in Phase 2
+- [x] Tournament stage detection (early/middle/late/bubble/ITM/heads-up from blind level + active_players) — Validated in Phase 5
+- [x] ICM multiplier at bubble (1.4x call threshold for all-in decisions) — Validated in Phase 5
+- [x] Stack role classification (big/medium/short relative to average) — Validated in Phase 5
 
 ### Active
 
-- [ ] Bot class inheriting from `Bot` with correct import form (`from engine.player_interface import Bot`)
-- [ ] Safety guards: try/except wrapper, never fold for free, never use `('check', 0)`, cap raises at stack
-- [ ] Pot accumulator workaround for broken `pot_size` (current-street only bug)
-- [ ] Stack mode detection (deep/medium/shallow/push-fold by BB thresholds)
-- [ ] Tournament stage detection (early/middle/late/bubble/ITM/heads-up from blind level + active_players)
-- [ ] Preflop hand classification via Chen formula with precomputed lookup table
-- [ ] Preflop opening ranges by stack mode (deep ~20%, medium ~15%, shallow reshove-only)
-- [ ] Preflop situational strategy (RFI, facing open, facing 3-bet, BB option, SB complete)
-- [ ] Push-fold shove table (<15BB) with stack-depth-dependent ranges
-- [ ] Push-fold call table (facing shove) with villain-stack-dependent ranges
-- [ ] Monte Carlo postflop equity estimation (300/400/500 iterations by street)
-- [ ] 7-card hand evaluator (no treys library — manual rank/suit evaluation of C(7,5) combos)
-- [ ] C-bet logic with preflop aggressor tracking and board texture awareness
-- [ ] Pot odds call/fold decisions with required equity calculation
-- [ ] ICM multiplier at bubble (1.4x call threshold for all-in decisions)
-- [ ] Draw detection (flush draw, OESD, gutshot, combo) with EHS bonus
-- [ ] Board texture classification (dry/semi-wet/wet/paired)
-- [ ] Bet sizing system (preflop by stack mode, postflop by street/texture/situation)
-- [ ] Stack commitment rule (bet >= 60% stack -> shove instead)
-- [ ] Module-level precomputation of all lookup tables (free of 500ms budget)
-- [ ] All instance state picklable (basic Python types only)
-- [ ] Complete bot in single file `players/mtt_bot.py`
+All v1.0 milestone requirements have been implemented and validated across Phases 1-5.
 
 ### Out of Scope
 
@@ -110,4 +92,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-11 after Phase 2 completion*
+*Last updated: 2026-04-12 after Phase 5 completion — all v1.0 milestone phases complete*
