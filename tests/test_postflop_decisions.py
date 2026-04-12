@@ -281,7 +281,7 @@ class TestStackCommit:
 # POST-11: Turn Barrel Tests
 # ============================================================
 class TestTurnBarrel:
-    """POST-11: Turn barrel with STRONG+ hands (EHS >= 0.65)."""
+    """POST-11: Turn barrel with STRONG+ hands (EHS >= 0.55 after TOURN-07 exploit adjustment)."""
 
     def setup_method(self):
         self.bot = HawkEyeBot()
@@ -310,7 +310,7 @@ class TestTurnBarrel:
 # POST-12: River Value Bet Tests
 # ============================================================
 class TestRiverValueBet:
-    """POST-12: River value bet with STRONG+ hands (EHS >= 0.65)."""
+    """POST-12: River value bet with STRONG+ hands (EHS >= 0.55 after TOURN-07 exploit adjustment)."""
 
     def setup_method(self):
         self.bot = HawkEyeBot()

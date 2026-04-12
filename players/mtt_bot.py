@@ -654,6 +654,8 @@ class HawkEyeBot(Bot):
 
         Returns one of: 'big' (>= 1.5x avg), 'short' (<= 0.5x avg), 'medium'.
         """
+        if self._initial_table_players == 0:
+            return "medium"
         total_chips = self._initial_table_players * 1500
         n = game_state["active_players"]
         avg_stack = total_chips / n
@@ -1365,8 +1367,8 @@ class HawkEyeBot(Bot):
 
         Decision hierarchy:
         1. Flop + preflop aggressor + EHS >= c-bet threshold -> c-bet (POST-06)
-        2. Turn + EHS >= 0.65 (STRONG+) -> barrel at 66% pot (POST-11)
-        3. River + EHS >= 0.65 (STRONG+) -> value bet at 75% pot (POST-12)
+        2. Turn + EHS >= value_threshold (0.55, adjusted by TOURN-07 exploit factor) -> barrel at 66% pot (POST-11)
+        3. River + EHS >= value_threshold (0.55, adjusted by TOURN-07 exploit factor) -> value bet at 75% pot (POST-12)
         4. Otherwise -> check
 
         All bets check SPR (POST-13) and stack commitment (POST-10) before sizing.
@@ -1395,8 +1397,7 @@ class HawkEyeBot(Bot):
                 return self._guard("raise", stack, game_state)
             return self._guard("raise", bet_size, game_state)
 
-        # TOURN-07: Field exploitation -- lower value bet threshold
-        # TOURN-05: ITM additionally benefits from thinner value bets
+        # TOURN-07: Field exploitation -- lower value bet threshold against weak field
         exploit_adj = 0.10  # D-07: reduce EHS requirement by 10% against weak field
         value_threshold = 0.65 - exploit_adj  # 0.55
 
