@@ -744,6 +744,27 @@ class HawkEyeBot(Bot):
         stack_mode = self._get_stack_mode(game_state)
         situation = self._detect_situation(game_state)
 
+        # 3. Get tournament stage (TOURN-04/05/06: used for threshold adjustments)
+        stage = self._get_tournament_stage(game_state)
+
+        # === TOURN-06: Heads-up wide opening ===
+        if stage == "heads_up":
+            if situation == "bb_option":
+                return self._guard("call", 0, game_state)
+            if situation in ("rfi", "sb_complete"):
+                if chen_score >= 3:
+                    self._was_preflop_aggressor = True
+                    amt = self._preflop_raise_amount(game_state, stack_mode)
+                    return self._guard("raise", amt, game_state)
+                else:
+                    return self._guard("fold", 0, game_state)
+            if situation in ("facing_open", "facing_3bet"):
+                if chen_score >= 5:
+                    return self._guard("call", 0, game_state)
+                else:
+                    return self._guard("fold", 0, game_state)
+            return self._guard("fold", 0, game_state)
+
         # === PUSH-FOLD MODE (<15BB) ===
         if stack_mode == "push_fold":
             # BB option: free check
@@ -840,6 +861,17 @@ class HawkEyeBot(Bot):
         # === DEEP / MEDIUM MODE (25BB+) ===
         # Chen thresholds by stack mode
         rfi_threshold = 6 if stack_mode == "deep" else 7
+
+        # === TOURN-04/05: Bubble and ITM threshold adjustments ===
+        if stage == "bubble":
+            role = self._get_stack_role(game_state)
+            if role == "big":
+                rfi_threshold -= 1    # D-04: Bully with wider range
+            elif role == "medium":
+                rfi_threshold += 2    # D-04: Tighten to survive
+            # short stack falls through to push_fold mode (already handled above)
+        elif stage == "itm":
+            rfi_threshold -= 1        # D-05: Release pressure, fight for 1st
 
         # BB option: always check (free card)
         if situation == "bb_option":
@@ -1300,6 +1332,11 @@ class HawkEyeBot(Bot):
         # POST-07: Required equity = call / (pot + call)
         req_eq = call_amount / (est_pot + call_amount) if (est_pot + call_amount) > 0 else 0.0
 
+        # TOURN-02: ICM calling multiplier at bubble
+        stage = self._get_tournament_stage(game_state)
+        if stage == "bubble" and call_amount >= stack * 0.3:
+            req_eq = min(req_eq * 1.4, 1.0)
+
         # POST-13: SPR commitment check
         safe_pot = est_pot if est_pot > 0 else 1
         spr = stack / safe_pot
@@ -1358,6 +1395,11 @@ class HawkEyeBot(Bot):
                 return self._guard("raise", stack, game_state)
             return self._guard("raise", bet_size, game_state)
 
+        # TOURN-07: Field exploitation -- lower value bet threshold
+        # TOURN-05: ITM additionally benefits from thinner value bets
+        exploit_adj = 0.10  # D-07: reduce EHS requirement by 10% against weak field
+        value_threshold = 0.65 - exploit_adj  # 0.55
+
         # POST-06: C-bet on flop when preflop aggressor
         if street == 3 and self._was_preflop_aggressor:
             threshold = self._cbet_threshold(texture)
@@ -1365,13 +1407,13 @@ class HawkEyeBot(Bot):
                 bet_size = self._calc_bet_size(est_pot, stack, texture, street)
                 return _apply_commit(bet_size)
 
-        # POST-11: Turn barrel with STRONG+ hands
-        if street == 4 and ehs >= 0.65:
+        # POST-11: Turn barrel with STRONG+ hands (TOURN-07: adjusted threshold)
+        if street == 4 and ehs >= value_threshold:
             bet_size = self._calc_bet_size(est_pot, stack, texture, street)
             return _apply_commit(bet_size)
 
-        # POST-12: River value bet with STRONG+ hands
-        if street == 5 and ehs >= 0.65:
+        # POST-12: River value bet with STRONG+ hands (TOURN-07: adjusted threshold)
+        if street == 5 and ehs >= value_threshold:
             bet_size = self._calc_bet_size(est_pot, stack, texture, street)
             return _apply_commit(bet_size)
 

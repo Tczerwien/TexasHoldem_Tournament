@@ -361,14 +361,15 @@ class TestICMMultiplier(unittest.TestCase):
         self.assertEqual(action, "call")
 
     def test_icm_capped_at_one(self):
-        """active_players=4 (bubble), very large call -> req_eq capped at 1.0."""
+        """active_players=4 (bubble), very large call -> req_eq capped at 1.0.
+
+        Use ehs=0.80 (below 0.85 monster threshold) so pot-odds path is tested.
+        req_eq = 2500/(500+2500) = 0.833, ICM: 0.833*1.4=1.167 capped at 1.0.
+        ehs=0.80 < 1.0 -> fold.
+        """
         gs = _make_game_state(active_players=4, bb=100, sb=50, stack=3000,
                               call_amount=2500)
-        # req_eq = 2500 / (500 + 2500) = 0.833
-        # 1.4 * 0.833 = 1.167 -> capped at 1.0
-        # ehs=0.95 >= 1.0? No -> fold (or ehs=1.0 edge case)
-        # With ehs=0.95, even capped req_eq=1.0 means fold
-        action, amount = self.bot._facing_bet(gs, 500, 0.95, "dry", 4)
+        action, amount = self.bot._facing_bet(gs, 500, 0.80, "dry", 4)
         self.assertEqual(action, "fold")
 
 

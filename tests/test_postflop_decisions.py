@@ -54,7 +54,7 @@ def make_card(name):
 
 
 def make_gs(call_amount, stack_size, min_raise, board_cards, hole_cards=None,
-            pot_size=0, big_blind=100):
+            pot_size=0, big_blind=100, active_players=6):
     """Build a complete game_state dict for testing."""
     if hole_cards is None:
         hole_cards = [make_card("Ah"), make_card("Kh")]
@@ -66,6 +66,7 @@ def make_gs(call_amount, stack_size, min_raise, board_cards, hole_cards=None,
         "min_raise": min_raise,
         "pot_size": pot_size,
         "blinds": {"big": big_blind, "small": big_blind // 2},
+        "active_players": active_players,
     }
 
 
