@@ -1,6 +1,8 @@
 """Tournament awareness tests for HawkEyeBot.
 
-Tests TOURN-01 (stage detection) and TOURN-03 (stack role classification).
+Tests TOURN-01 (stage detection), TOURN-03 (stack role classification),
+TOURN-02 (ICM multiplier), TOURN-04 (bubble play), TOURN-05 (ITM aggression),
+TOURN-06 (heads-up play), and TOURN-07 (exploit adjustment).
 Uses mock engine module pattern from test_bot_safety.py.
 """
 import sys
@@ -27,7 +29,7 @@ sys.modules["engine.player_interface"] = mock_player_interface
 
 # Add players directory to path and import the bot
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "players"))
-from mtt_bot import HawkEyeBot
+from mtt_bot import HawkEyeBot, FULL_DECK, CHEN_TABLE
 
 
 def _make_game_state(active_players=6, bb=50, sb=25, stack=1500,
@@ -139,6 +141,266 @@ class TestStackRole(unittest.TestCase):
         # With 10 active: avg = 15000/10 = 1500, big threshold = 2250
         gs2 = _make_game_state(active_players=10, stack=2250)
         self.assertEqual(self.bot._get_stack_role(gs2), "big")
+
+
+def _find_card(rank_int, suit_idx=0):
+    """Find a card from FULL_DECK by rank (0=2..12=A) and suit index (0-3)."""
+    return FULL_DECK[rank_int * 4 + suit_idx]
+
+
+def _make_preflop_gs(active_players=6, bb=50, sb=25, stack=1500,
+                     hole_cards=None, call_amount=None, min_raise=None):
+    """Build a game_state dict suitable for preflop decisions.
+
+    If call_amount is None, defaults to bb (RFI situation).
+    If min_raise is None, defaults to bb.
+    """
+    if call_amount is None:
+        call_amount = bb  # RFI: must call one BB to enter
+    if min_raise is None:
+        min_raise = bb
+    if hole_cards is None:
+        # Default: K2o (chen=3) -- K of spades, 2 of hearts
+        hole_cards = [_find_card(11, 0), _find_card(0, 1)]
+    return {
+        "active_players": active_players,
+        "blinds": {"big": bb, "small": sb},
+        "stack_size": stack,
+        "hole_cards": hole_cards,
+        "board_cards": [],
+        "call_amount": call_amount,
+        "min_raise": min_raise,
+        "pot_size": 0,
+    }
+
+
+class TestHeadsUp(unittest.TestCase):
+    """TOURN-06: Heads-up wide opening with Chen >= 3."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+        self.bot._initial_table_players = 10
+        # Reset state that _preflop might use
+        self.bot._was_preflop_aggressor = False
+        self.bot._pot_accumulator = 0
+
+    def test_hu_rfi_opens_wide(self):
+        """active_players=2, chen=3 (K2o), rfi -> raises."""
+        # K2o: rank_int K=11 suit=0, 2=rank_int 0 suit=1 => chen=3
+        hole = [_find_card(11, 0), _find_card(0, 1)]
+        gs = _make_preflop_gs(active_players=2, bb=100, sb=50, stack=3000,
+                              hole_cards=hole, call_amount=100)
+        action, amount = self.bot._preflop(gs, 150)
+        self.assertEqual(action, "raise")
+
+    def test_hu_rfi_folds_trash(self):
+        """active_players=2, chen=-1 (72o), rfi -> folds."""
+        # 72o: rank_int 7=5 suit=0, 2=rank_int 0 suit=1 => chen=-1
+        hole = [_find_card(5, 0), _find_card(0, 1)]
+        gs = _make_preflop_gs(active_players=2, bb=100, sb=50, stack=3000,
+                              hole_cards=hole, call_amount=100)
+        action, amount = self.bot._preflop(gs, 150)
+        self.assertEqual(action, "fold")
+
+    def test_hu_sb_complete_opens_wide(self):
+        """active_players=2, sb_complete, chen=3 (K2o) -> raises."""
+        hole = [_find_card(11, 0), _find_card(0, 1)]
+        # sb_complete: call_amount = bb - sb = 50
+        gs = _make_preflop_gs(active_players=2, bb=100, sb=50, stack=3000,
+                              hole_cards=hole, call_amount=50)
+        action, amount = self.bot._preflop(gs, 150)
+        self.assertIn(action, ("call", "raise"))
+
+    def test_hu_facing_open_calls_wider(self):
+        """active_players=2, facing_open, chen=5 (A5o) -> calls."""
+        # A5o: rank_int A=12 suit=0, 5=rank_int 3 suit=1 => chen=5
+        hole = [_find_card(12, 0), _find_card(3, 1)]
+        # facing_open: call_amount between bb and 6*bb
+        gs = _make_preflop_gs(active_players=2, bb=100, sb=50, stack=3000,
+                              hole_cards=hole, call_amount=250)
+        action, amount = self.bot._preflop(gs, 400)
+        self.assertEqual(action, "call")
+
+    def test_hu_facing_open_folds_weak(self):
+        """active_players=2, facing_open, chen=3 (K2o) -> folds."""
+        hole = [_find_card(11, 0), _find_card(0, 1)]
+        gs = _make_preflop_gs(active_players=2, bb=100, sb=50, stack=3000,
+                              hole_cards=hole, call_amount=250)
+        action, amount = self.bot._preflop(gs, 400)
+        self.assertEqual(action, "fold")
+
+
+class TestBubblePlay(unittest.TestCase):
+    """TOURN-04: Bubble adjustments -- big stack opens wider, medium tightens."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+        self.bot._initial_table_players = 10
+        self.bot._was_preflop_aggressor = False
+        self.bot._pot_accumulator = 0
+
+    def test_bubble_big_stack_opens_wider(self):
+        """active_players=4 (bubble), big stack, deep, rfi, chen=5 -> opens.
+
+        Normal deep rfi_threshold=6, bubble big lowers to 5. chen=5 opens.
+        """
+        # A5o: chen=5
+        hole = [_find_card(12, 0), _find_card(3, 1)]
+        # big stack: 6000 with 4 active, avg=15000/4=3750, 6000>=5625 -> big
+        gs = _make_preflop_gs(active_players=4, bb=100, sb=50, stack=6000,
+                              hole_cards=hole, call_amount=100)
+        action, amount = self.bot._preflop(gs, 150)
+        self.assertEqual(action, "raise")
+
+    def test_bubble_medium_stack_tightens(self):
+        """active_players=4 (bubble), medium stack, deep, rfi, chen=7 -> folds.
+
+        Normal deep rfi_threshold=6, bubble medium raises to 8. chen=7 folds.
+        """
+        # KJo: chen=7
+        hole = [_find_card(11, 0), _find_card(9, 1)]
+        # medium stack: 3500 with 4 active, avg=3750, between thresholds -> medium
+        # stack=3500, bb=100 -> 35BB -> deep mode
+        gs = _make_preflop_gs(active_players=4, bb=100, sb=50, stack=3500,
+                              hole_cards=hole, call_amount=100)
+        action, amount = self.bot._preflop(gs, 150)
+        self.assertEqual(action, "fold")
+
+    def test_bubble_short_stack_uses_pushfold(self):
+        """active_players=4 (bubble), short stack (<15BB) -> push_fold mode.
+
+        Push-fold mode pre-empts bubble threshold adjustments.
+        """
+        # A5o: chen=5
+        hole = [_find_card(12, 0), _find_card(3, 1)]
+        # stack=800, bb=100 -> 8BB -> push_fold mode
+        gs = _make_preflop_gs(active_players=4, bb=100, sb=50, stack=800,
+                              hole_cards=hole, call_amount=100)
+        action, amount = self.bot._preflop(gs, 150)
+        # Should use push-fold tables, not modified threshold logic.
+        # Result depends on SHOVE_TABLE for A5o at 8BB, but the point is
+        # push_fold mode is used (not the deep/medium threshold path).
+        # A5o at 8BB should shove per standard push-fold ranges.
+        self.assertIn(action, ("raise", "fold"))
+
+
+class TestITMAggression(unittest.TestCase):
+    """TOURN-05: ITM (3 players) -- opens wider, no ICM multiplier."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+        self.bot._initial_table_players = 10
+        self.bot._was_preflop_aggressor = False
+        self.bot._pot_accumulator = 0
+
+    def test_itm_opens_wider(self):
+        """active_players=3 (itm), deep, rfi, chen=5 -> opens.
+
+        Normal deep rfi_threshold=6, ITM lowers to 5. chen=5 opens.
+        """
+        # A5o: chen=5
+        hole = [_find_card(12, 0), _find_card(3, 1)]
+        # stack=5000, bb=100 -> 50BB -> deep mode
+        # 3 active, avg=15000/3=5000, stack=5000 -> medium role (not relevant for ITM threshold)
+        gs = _make_preflop_gs(active_players=3, bb=100, sb=50, stack=5000,
+                              hole_cards=hole, call_amount=100)
+        action, amount = self.bot._preflop(gs, 150)
+        self.assertEqual(action, "raise")
+
+    def test_itm_no_icm_multiplier(self):
+        """active_players=3, facing_bet with large call -> NO ICM multiplier."""
+        self.bot._was_preflop_aggressor = False
+        gs = _make_game_state(active_players=3, bb=100, sb=50, stack=3000,
+                              call_amount=1000)
+        # ehs=0.40, est_pot=2000
+        # req_eq = 1000 / (2000 + 1000) = 0.333
+        # Without ICM: 0.40 >= 0.333 -> call
+        # With ICM (if applied wrong): 0.333 * 1.4 = 0.467 > 0.40 -> fold
+        # At ITM, ICM should NOT apply, so should call
+        action, amount = self.bot._facing_bet(gs, 2000, 0.40, "dry", 4)
+        self.assertEqual(action, "call")
+
+
+class TestICMMultiplier(unittest.TestCase):
+    """TOURN-02: ICM 1.4x calling multiplier at bubble for significant calls."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+        self.bot._initial_table_players = 10
+        self.bot._was_preflop_aggressor = False
+        self.bot._pot_accumulator = 0
+
+    def test_icm_at_bubble_large_call(self):
+        """active_players=4 (bubble), call >= 30% stack, ehs between normal and 1.4x -> folds.
+
+        req_eq = 1000/(2000+1000) = 0.333
+        1.4x req_eq = 0.467
+        ehs = 0.40 > 0.333 (normal call) but < 0.467 (ICM fold)
+        """
+        gs = _make_game_state(active_players=4, bb=100, sb=50, stack=3000,
+                              call_amount=1000)
+        action, amount = self.bot._facing_bet(gs, 2000, 0.40, "dry", 4)
+        self.assertEqual(action, "fold")
+
+    def test_icm_not_at_bubble(self):
+        """active_players=6 (middle), same call/ehs -> calls (no ICM)."""
+        gs = _make_game_state(active_players=6, bb=50, sb=25, stack=3000,
+                              call_amount=1000)
+        # Same numbers: req_eq=0.333, ehs=0.40 >= 0.333 -> call
+        action, amount = self.bot._facing_bet(gs, 2000, 0.40, "dry", 4)
+        self.assertEqual(action, "call")
+
+    def test_icm_small_call_not_applied(self):
+        """active_players=4 (bubble), call < 30% stack -> no ICM multiplier."""
+        gs = _make_game_state(active_players=4, bb=100, sb=50, stack=3000,
+                              call_amount=500)
+        # req_eq = 500 / (2000 + 500) = 0.20
+        # call_amount (500) < stack*0.3 (900) -> no ICM
+        # ehs=0.25 >= 0.20 -> call
+        action, amount = self.bot._facing_bet(gs, 2000, 0.25, "dry", 4)
+        self.assertEqual(action, "call")
+
+    def test_icm_capped_at_one(self):
+        """active_players=4 (bubble), very large call -> req_eq capped at 1.0."""
+        gs = _make_game_state(active_players=4, bb=100, sb=50, stack=3000,
+                              call_amount=2500)
+        # req_eq = 2500 / (500 + 2500) = 0.833
+        # 1.4 * 0.833 = 1.167 -> capped at 1.0
+        # ehs=0.95 >= 1.0? No -> fold (or ehs=1.0 edge case)
+        # With ehs=0.95, even capped req_eq=1.0 means fold
+        action, amount = self.bot._facing_bet(gs, 500, 0.95, "dry", 4)
+        self.assertEqual(action, "fold")
+
+
+class TestExploitAdjustment(unittest.TestCase):
+    """TOURN-07: Field exploitation -- lower value bet threshold from 0.65 to 0.55."""
+
+    def setUp(self):
+        self.bot = HawkEyeBot()
+        self.bot._initial_table_players = 10
+        self.bot._was_preflop_aggressor = False
+        self.bot._pot_accumulator = 0
+
+    def test_exploit_lowers_turn_threshold(self):
+        """street=4, ehs=0.58 (below 0.65 but above 0.55) -> bets."""
+        gs = _make_game_state(active_players=6, bb=50, sb=25, stack=3000,
+                              call_amount=0)
+        action, amount = self.bot._bet_or_check(gs, 500, 0.58, "dry", 4)
+        self.assertEqual(action, "raise")
+
+    def test_exploit_lowers_river_threshold(self):
+        """street=5, ehs=0.58 (below 0.65 but above 0.55) -> bets."""
+        gs = _make_game_state(active_players=6, bb=50, sb=25, stack=3000,
+                              call_amount=0)
+        action, amount = self.bot._bet_or_check(gs, 500, 0.58, "dry", 5)
+        self.assertEqual(action, "raise")
+
+    def test_exploit_no_bet_below_adjusted(self):
+        """street=4, ehs=0.50 (below 0.55) -> checks."""
+        gs = _make_game_state(active_players=6, bb=50, sb=25, stack=3000,
+                              call_amount=0)
+        action, amount = self.bot._bet_or_check(gs, 500, 0.50, "dry", 4)
+        self.assertEqual(action, "call")  # call with 0 = check
 
 
 if __name__ == "__main__":
